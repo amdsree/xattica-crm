@@ -13,7 +13,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="file:./dev.db"
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
 ENV JWT_SECRET="build-secret-placeholder-minimum-32-chars-long"
 RUN npx prisma generate
 RUN npm run build
@@ -32,10 +32,12 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "scripts/start.js"]

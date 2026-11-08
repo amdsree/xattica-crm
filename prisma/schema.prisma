@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Branch {
+  id              String      @id @default(uuid())
+  code            String      @unique // KLM, KTM, COK, CLT
+  name            String
+  phone           String
+  address         String
+  users           User[]
+  originJobs      JobSheet[]  @relation("OriginBranch")
+  servicingJobs   JobSheet[]  @relation("ServicingBranch")
+  stockItems      StockItem[]
+  createdAt       DateTime    @default(now())
+}
+
+model User {
+  id              String      @id @default(uuid())
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id])
+  name            String
+  username        String      @unique
+  password        String
+  role            String      // SUPER_ADMIN, BRANCH_MANAGER, INHOUSE_TECH, FIELD_TECH
+  phone           String?
+  assignedJobs    JobSheet[]  @relation("AssignedTech")
+  intakeJobs      JobSheet[]  @relation("IntakeStaff")
+  createdAt       DateTime    @default(now())
+}
+
+model Customer {
+  id              String      @id @default(uuid())
+  name            String
+  phone           String
+  address         String?
+  jobs            JobSheet[]
+  createdAt       DateTime    @default(now())
+
+  @@index([phone])
+}
+
+model StockItem {
+  id              String      @id @default(uuid())
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id])
+  partName        String
+  invoiceNumber   String
+  vendorName      String
+  landingPrice    Float
+  quantity        Int
+  jobParts        JobPart[]
+  createdAt       DateTime    @default(now())
+}
+
+model JobSheet {
+  id                    String      @id @default(uuid())
+  jobNo                 String      @unique
+  originBranchId        String
+  originBranch          Branch      @relation("OriginBranch", fields: [originBranchId], references: [id])
+  servicingBranchId     String?
+  servicingBranch       Branch?     @relation("ServicingBranch", fields: [servicingBranchId], references: [id])
+
+  customerId            String
+  customer              Customer    @relation(fields: [customerId], references: [id])
+  intakeStaffId         String
+  intakeStaff           User        @relation("IntakeStaff", fields: [intakeStaffId], references: [id])
+  assignedTechId        String?
+  assignedTech          User?       @relation("AssignedTech", fields: [assignedTechId], references: [id])
+
+  deviceType            String      // PC, Laptop, IT Service
+  brand                 String
+  modelNumber           String
+  serialNumber          String
+  physicalCondition     String
+  complaintDescription  String
+  additionalIssues      String?
+  isWarranty            Boolean     @default(false)
+
+  status                String      @default("RECEIVED")
+  tatDate               DateTime?
+  approvalProof         String?
+  remarks               String?
+
+  estimatedCost         Float?
+  estimatedSpareCost    Float?
+  serviceCharge         Float       @default(0.0)
+  interBranchFee        Float       @default(0.0)
+  
+  paymentStatus         String      @default("UNPAID") // UNPAID, PAID, CREDIT
+  creditDueDate         DateTime?
+  paymentRemarks        String?
+
+  disposalAlertCount    Int         @default(0)
+  closedOutcome         String?     // REPAIR_DONE, NON_REPAIRABLE, RETURNED_NO_SERVICE
+
+  partsUsed             JobPart[]
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  closedAt              DateTime?
+}
+
+model JobPart {
+  id            String     @id @default(uuid())
+  jobSheetId    String
+  jobSheet      JobSheet   @relation(fields: [jobSheetId], references: [id])
+  stockItemId   String?
+  stockItem     StockItem? @relation(fields: [stockItemId], references: [id])
+  partName      String
+  landingPrice  Float
+  sellingPrice  Float
+  quantity      Int        @default(1)
+  createdAt     DateTime   @default(now())
+}

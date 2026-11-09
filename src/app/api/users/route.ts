@@ -5,7 +5,6 @@ import {
   errorResponse,
   isAdmin,
   requireSession,
-  requireAdmin,
   canManageStaff,
   isSuperAdmin,
   HttpError,
@@ -21,8 +20,16 @@ export async function GET(req: NextRequest) {
       ? requestedBranchId || undefined
       : session.branchId;
 
+    const whereClause: Record<string, unknown> = {};
+    if (branchId) {
+      whereClause.branchId = branchId;
+    }
+    if (!isSuperAdmin(session)) {
+      whereClause.role = { notIn: ["SUPER_ADMIN", "SUB_ADMIN"] };
+    }
+
     const users = await prisma.user.findMany({
-      where: branchId ? { branchId } : {},
+      where: whereClause,
       select: {
         id: true,
         name: true,
@@ -134,8 +141,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await requireSession();
-    if (!canManageStaff(session)) {
-      throw new HttpError(403, "Staff management access required");
+    if (!isSuperAdmin(session)) {
+      throw new HttpError(403, "Only Super Admin can reset employee passwords");
     }
 
     const body = await req.json();
@@ -152,18 +159,6 @@ export async function PATCH(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new HttpError(404, "User not found");
-    }
-
-    if (user.role === "SUPER_ADMIN" && !isSuperAdmin(session)) {
-      throw new HttpError(403, "Only Super Admin can reset the Super Admin account");
-    }
-
-    if (
-      user.role === "SUB_ADMIN" &&
-      !isSuperAdmin(session) &&
-      session.userId !== user.id
-    ) {
-      throw new HttpError(403, "Permission denied to reset this sub-admin account");
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -209,8 +204,15 @@ export async function DELETE(req: NextRequest) {
       throw new HttpError(404, "User not found");
     }
 
-    if (targetUser.username === "theerdha") {
-      throw new HttpError(400, "Sub Admin account Theerdha cannot be deleted");
+    if (
+      targetUser.username === "theerdha" ||
+      targetUser.username === "ctowaves" ||
+      targetUser.username === "ceowaves" ||
+      targetUser.username === "wavesceo" ||
+      targetUser.role === "SUPER_ADMIN" ||
+      targetUser.role === "SUB_ADMIN"
+    ) {
+      throw new HttpError(400, "Administrative accounts cannot be deleted");
     }
 
     if (targetUser.assignedJobs.length > 0 || targetUser.intakeJobs.length > 0) {

@@ -42,7 +42,10 @@ export default function Navbar() {
     );
   }
 
-  const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const canAccessAdmin =
+    currentUser.role === "SUPER_ADMIN" ||
+    currentUser.role === "SUB_ADMIN" ||
+    currentUser.role === "STAFF_MANAGER";
 
   return (
     <header className="border-b border-zinc-200 bg-white sticky top-0 z-50 shadow-sm print:hidden">
@@ -99,7 +102,7 @@ export default function Navbar() {
                 </span>
               </Link>
 
-              {isSuperAdmin && (
+              {canAccessAdmin && (
                 <Link
                   href="/admin"
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -130,7 +133,7 @@ export default function Navbar() {
               </div>
             </div>
 
-            {isSuperAdmin && (
+            {canAccessAdmin && (
               <div className="hidden lg:flex items-center gap-1.5 bg-purple-50 border border-purple-200 px-2.5 py-1.5 rounded-lg text-xs">
                 <span className="text-purple-700 font-bold text-[10px] uppercase">
                   Scope:

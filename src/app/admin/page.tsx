@@ -625,20 +625,22 @@ export default function AdminDashboardPage() {
             </h1>
             <span
               className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                isStaffManagerOnly
+                currentUser?.role === "SUB_ADMIN"
+                  ? "bg-indigo-100 text-indigo-800 border-indigo-200"
+                  : isStaffManagerOnly
                   ? "bg-sky-100 text-sky-800 border-sky-200"
                   : "bg-purple-100 text-purple-800 border-purple-200"
               }`}
             >
-              {isStaffManagerOnly
-                ? "Operations & Analytics (Julian)"
+              {currentUser?.role === "SUB_ADMIN"
+                ? `Sub Admin (${currentUser.name || "Live"})`
+                : isStaffManagerOnly
+                ? "Operations & Analytics"
                 : "Multi-Branch Live"}
             </span>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
-            {isStaffManagerOnly
-              ? "Signed in as Julian (@ceowaves). Authorized for operations, staff management, and financial analytics."
-              : `Auditing multi-branch stores (Logged in as ${currentUser?.name || "Admin"}).`}
+            Auditing multi-branch stores (Logged in as {currentUser?.name || "Admin"}).
           </p>
         </div>
 
@@ -873,8 +875,8 @@ export default function AdminDashboardPage() {
                 <option value="BRANCH_MANAGER">Branch Manager (Store Counter)</option>
                 {currentUser?.role === "SUPER_ADMIN" && (
                   <>
-                    <option value="SUB_ADMIN">Sub Admin (Theerdha - Full Control)</option>
-                    <option value="STAFF_MANAGER">Staff Manager (Julian - Jobs & Staff)</option>
+                    <option value="SUB_ADMIN">Sub Admin (Administrative Access)</option>
+                    <option value="STAFF_MANAGER">Staff Manager (Operations & Staff)</option>
                   </>
                 )}
               </select>
@@ -979,9 +981,7 @@ export default function AdminDashboardPage() {
                             </button>
                           </div>
                         ) : (
-                          (currentUser?.role === "SUPER_ADMIN" ||
-                            (s.role !== "SUPER_ADMIN" && s.username !== "theerdha") ||
-                            currentUser?.username === s.username) && (
+                          currentUser?.role === "SUPER_ADMIN" && (
                             <button
                               type="button"
                               onClick={() => {
@@ -998,7 +998,11 @@ export default function AdminDashboardPage() {
 
                         {currentUser?.role === "SUPER_ADMIN" &&
                           s.role !== "SUPER_ADMIN" &&
-                          s.username !== "theerdha" && (
+                          s.role !== "SUB_ADMIN" &&
+                          s.username !== "theerdha" &&
+                          s.username !== "ctowaves" &&
+                          s.username !== "ceowaves" &&
+                          s.username !== "wavesceo" && (
                             <button
                               type="button"
                               onClick={() => handleDeleteStaff(s.id, s.name)}

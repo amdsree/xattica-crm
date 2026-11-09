@@ -121,12 +121,12 @@ async function main() {
         (await prisma.branch.findFirst());
 
       if (defaultBranch) {
+        const theerdhaPass = process.env.THEERDHA_PASSWORD || "theerdha123";
+        const theerdhaHash = await bcrypt.hash(theerdhaPass, 10);
         const existingTheerdha = await prisma.user.findUnique({
           where: { username: "theerdha" },
         });
         if (!existingTheerdha) {
-          const theerdhaPass = process.env.THEERDHA_PASSWORD || "theerdha123";
-          const theerdhaHash = await bcrypt.hash(theerdhaPass, 10);
           await prisma.user.create({
             data: {
               name: "Theerdha",
@@ -138,25 +138,57 @@ async function main() {
             },
           });
           console.log('[xattica] Sub Admin "theerdha" verified/created.');
+        } else if (existingTheerdha.role !== "SUB_ADMIN") {
+          await prisma.user.update({
+            where: { username: "theerdha" },
+            data: { role: "SUB_ADMIN" },
+          });
+          console.log('[xattica] User "theerdha" role updated to SUB_ADMIN.');
         }
 
-        const existingCeoWaves = await prisma.user.findUnique({
-          where: { username: "ceowaves" },
+        const ctoPass =
+          process.env.CTOWAVES_PASSWORD ||
+          process.env.CEOWAVES_PASSWORD ||
+          "ctowaves123";
+        const ctoHash = await bcrypt.hash(ctoPass, 10);
+
+        const existingCtoWaves = await prisma.user.findUnique({
+          where: { username: "ctowaves" },
         });
-        if (!existingCeoWaves) {
-          const ceoPass = process.env.CEOWAVES_PASSWORD || "ceowaves123";
-          const ceoHash = await bcrypt.hash(ceoPass, 10);
-          await prisma.user.create({
-            data: {
-              name: "Julian",
-              username: "ceowaves",
-              password: ceoHash,
-              role: "STAFF_MANAGER",
-              branchId: defaultBranch.id,
-              phone: "+91 98470 00002",
-            },
+
+        if (!existingCtoWaves) {
+          const oldAccount = await prisma.user.findFirst({
+            where: { username: { in: ["ceowaves", "wavesceo"] } },
           });
-          console.log('[xattica] Staff Manager "ceowaves" (Julian) verified/created.');
+
+          if (oldAccount) {
+            await prisma.user.update({
+              where: { id: oldAccount.id },
+              data: {
+                username: "ctowaves",
+                role: "SUB_ADMIN",
+              },
+            });
+            console.log('[xattica] Account renamed to "ctowaves" with SUB_ADMIN role.');
+          } else {
+            await prisma.user.create({
+              data: {
+                name: "Julian",
+                username: "ctowaves",
+                password: ctoHash,
+                role: "SUB_ADMIN",
+                branchId: defaultBranch.id,
+                phone: "+91 98470 00002",
+              },
+            });
+            console.log('[xattica] Sub Admin "ctowaves" (Julian) verified/created.');
+          }
+        } else if (existingCtoWaves.role !== "SUB_ADMIN") {
+          await prisma.user.update({
+            where: { username: "ctowaves" },
+            data: { role: "SUB_ADMIN" },
+          });
+          console.log('[xattica] User "ctowaves" role updated to SUB_ADMIN.');
         }
       }
       await prisma.$disconnect();

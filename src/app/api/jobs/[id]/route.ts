@@ -393,7 +393,7 @@ export async function PATCH(
       if (!canReopenJob(session)) {
         throw new HttpError(
           403,
-          "Only Super Admin or Theerdha can approve reopening completed service jobs"
+          "Only Super Admin or Sub Admins can approve reopening completed service jobs"
         );
       }
 
@@ -424,7 +424,7 @@ export async function PATCH(
       if (!canReopenJob(session)) {
         throw new HttpError(
           403,
-          "Only Super Admin or Theerdha can review reopen requests"
+          "Only Super Admin or Sub Admins can review reopen requests"
         );
       }
 

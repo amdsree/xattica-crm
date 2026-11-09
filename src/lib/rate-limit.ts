@@ -39,9 +39,18 @@ export function checkRateLimit(
 }
 
 export function getClientIp(req: Request): string {
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp && realIp.trim().length > 0) {
+    return realIp.trim();
+  }
+
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0].trim();
+    const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
   }
-  return req.headers.get("x-real-ip") || "127.0.0.1";
+
+  return "127.0.0.1";
 }

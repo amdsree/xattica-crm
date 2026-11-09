@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
       throw new HttpError(400, "Current and new password are required");
     }
 
-    if (newPassword.length < 6) {
-      throw new HttpError(400, "New password must be at least 6 characters");
+    if (newPassword.length < 8) {
+      throw new HttpError(400, "New password must be at least 8 characters");
     }
 
     const user = await prisma.user.findUnique({

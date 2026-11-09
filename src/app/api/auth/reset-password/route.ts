@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
-const DEFAULT_RECOVERY_KEY =
-  "XATTICA-ADMIN-MASTER-RECOVERY-KEY-2026-KERALA-PC-BUILDER-SUPER-SECURE";
-
 export async function POST(req: NextRequest) {
   try {
+    const configuredKey = process.env.ADMIN_RECOVERY_KEY?.trim();
+    if (!configuredKey || configuredKey.length < 16) {
+      return NextResponse.json(
+        {
+          error:
+            "Emergency password recovery is currently disabled. Configure ADMIN_RECOVERY_KEY in environment variables to enable it.",
+        },
+        { status: 503 }
+      );
+    }
+
     const ip = getClientIp(req);
     const limit = checkRateLimit(ip, "reset-password", 5, 15 * 60 * 1000);
     if (!limit.allowed) {
@@ -28,10 +37,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const expectedKey = process.env.ADMIN_RECOVERY_KEY || DEFAULT_RECOVERY_KEY;
+    const providedBuf = Buffer.from(recoveryKey.trim());
+    const expectedBuf = Buffer.from(configuredKey);
 
-    // Timing-safe-like comparison for length and content
-    if (recoveryKey.trim() !== expectedKey.trim()) {
+    const isMatch =
+      providedBuf.length === expectedBuf.length &&
+      crypto.timingSafeEqual(providedBuf, expectedBuf);
+
+    if (!isMatch) {
       return NextResponse.json(
         { error: "Invalid master recovery key" },
         { status: 401 }

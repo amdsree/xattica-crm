@@ -57,8 +57,15 @@ async function main() {
           }),
         ]);
 
-        const adminHash = await bcrypt.hash("admin123", 10);
-        const techHash = await bcrypt.hash("tech123", 10);
+        const crypto = require("crypto");
+        const adminPass = process.env.INITIAL_ADMIN_PASSWORD || crypto.randomBytes(8).toString("hex");
+        const techPass = process.env.INITIAL_TECH_PASSWORD || crypto.randomBytes(8).toString("hex");
+
+        const adminHash = await bcrypt.hash(adminPass, 10);
+        const techHash = await bcrypt.hash(techPass, 10);
+
+        console.log(`[xattica] Initial Super Admin account created: username: "admin", password: "${adminPass}"`);
+        console.log(`[xattica] Initial Technician accounts created with password: "${techPass}"`);
 
         await prisma.user.create({
           data: {

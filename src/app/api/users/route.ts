@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { errorResponse, isAdmin, requireSession, requireAdmin, HttpError } from "@/lib/session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * Staff directory used for technician assignment and staff management.
@@ -42,6 +43,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await requireAdmin();
+    const ip = getClientIp(req);
+    const limit = checkRateLimit(ip, "create-user", 20, 10 * 60 * 1000);
+    if (!limit.allowed) {
+      throw new HttpError(429, `Too many staff creation attempts. Please wait ${limit.retryAfterSeconds} seconds.`);
+    }
     const body = await req.json();
     const { name, username, password, branchId, role, phone } = body;
 
@@ -54,8 +60,8 @@ export async function POST(req: NextRequest) {
       throw new HttpError(400, "Username must be at least 3 characters");
     }
 
-    if (password.length < 6) {
-      throw new HttpError(400, "Password must be at least 6 characters");
+    if (password.length < 8) {
+      throw new HttpError(400, "Password must be at least 8 characters");
     }
 
     const validRoles = ["INHOUSE_TECH", "FIELD_TECH", "BRANCH_MANAGER"];
@@ -118,8 +124,8 @@ export async function PATCH(req: NextRequest) {
       throw new HttpError(400, "User ID and new password are required");
     }
 
-    if (newPassword.length < 6) {
-      throw new HttpError(400, "New password must be at least 6 characters");
+    if (newPassword.length < 8) {
+      throw new HttpError(400, "New password must be at least 8 characters");
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });

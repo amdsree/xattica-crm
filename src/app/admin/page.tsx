@@ -305,8 +305,8 @@ export default function AdminDashboardPage() {
   };
 
   const handleResetStaffPassword = async (userId: string) => {
-    if (!resetStaffPassword || resetStaffPassword.length < 6) {
-      setStaffError("New password must be at least 6 characters");
+    if (!resetStaffPassword || resetStaffPassword.length < 8) {
+      setStaffError("New password must be at least 8 characters");
       return;
     }
     setIsResettingStaff(true);

@@ -3,15 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const userCount = await prisma.user.count();
+    await prisma.$queryRaw`SELECT 1`;
     return NextResponse.json(
-      { status: "healthy", database: "connected", userCount, timestamp: new Date().toISOString() },
+      { status: "healthy", database: "connected", timestamp: new Date().toISOString() },
       { status: 200 }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { status: "healthy", database: "unreachable", error: String(error), timestamp: new Date().toISOString() },
-      { status: 200 }
+      { status: "unhealthy", database: "disconnected", timestamp: new Date().toISOString() },
+      { status: 503 }
     );
   }
 }

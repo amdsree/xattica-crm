@@ -8,10 +8,10 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 export async function POST(req: NextRequest) {
   try {
     const ip = getClientIp(req);
-    const limit = checkRateLimit(ip, "login", 5, 10 * 60 * 1000);
-    if (!limit.allowed) {
+    const ipLimit = checkRateLimit(ip, "login-ip", 10, 10 * 60 * 1000);
+    if (!ipLimit.allowed) {
       return NextResponse.json(
-        { error: `Too many login attempts. Please try again in ${limit.retryAfterSeconds} seconds.` },
+        { error: `Too many login attempts from this network. Please try again in ${ipLimit.retryAfterSeconds} seconds.` },
         { status: 429 }
       );
     }
@@ -22,6 +22,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Username and password are required" },
         { status: 400 }
+      );
+    }
+
+    const userLimit = checkRateLimit(`${ip}:${String(username).trim().toLowerCase()}`, "login-account", 5, 10 * 60 * 1000);
+    if (!userLimit.allowed) {
+      return NextResponse.json(
+        { error: `Too many attempts for this account. Please wait ${userLimit.retryAfterSeconds} seconds.` },
+        { status: 429 }
       );
     }
 

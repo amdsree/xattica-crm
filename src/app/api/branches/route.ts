@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, requireAdmin, HttpError } from "@/lib/session";
+import { errorResponse, requireSession, requireAdmin, isAdmin, HttpError } from "@/lib/session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET() {
   try {
+    const session = await requireSession();
+    const shouldIncludeCounts = isAdmin(session);
+
     const branches = await prisma.branch.findMany({
-      include: {
-        _count: {
-          select: {
-            users: true,
-            originJobs: true,
-            servicingJobs: true,
-            stockItems: true,
-          },
-        },
-      },
+      include: shouldIncludeCounts
+        ? {
+            _count: {
+              select: {
+                users: true,
+                originJobs: true,
+                servicingJobs: true,
+                stockItems: true,
+              },
+            },
+          }
+        : undefined,
       orderBy: { name: "asc" },
     });
 
@@ -27,6 +33,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     await requireAdmin();
+    const ip = getClientIp(req);
+    const limit = checkRateLimit(ip, "create-branch", 10, 10 * 60 * 1000);
+    if (!limit.allowed) {
+      throw new HttpError(429, `Too many requests. Please wait ${limit.retryAfterSeconds} seconds.`);
+    }
     const body = await req.json();
     const { name, code, phone, address } = body;
 

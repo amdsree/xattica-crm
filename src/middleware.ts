@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { SECRET_KEY } from "@/lib/jwt-key";
 
-const rawSecret = process.env.JWT_SECRET || "a4cc79cc989361ec2a8c615dc4bdc7191a79c59fbe63ca5299559d67150a6da2b714e64b020d4cd52c0fc480f464e0fb";
-const SECRET_KEY = new TextEncoder().encode(rawSecret);
+function applySecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  return res;
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -16,18 +22,20 @@ export async function middleware(req: NextRequest) {
     pathname === "/login" ||
     pathname.includes(".")
   ) {
-    return NextResponse.next();
+    return applySecurityHeaders(NextResponse.next());
   }
 
   const token = req.cookies.get("xattica_session")?.value;
 
   if (!token) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return applySecurityHeaders(
+        NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      );
     }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+    return applySecurityHeaders(NextResponse.redirect(loginUrl));
   }
 
   try {
@@ -35,7 +43,7 @@ export async function middleware(req: NextRequest) {
     const role = String(payload.role || "");
 
     if (pathname.startsWith("/admin") && role !== "SUPER_ADMIN") {
-      return NextResponse.redirect(new URL("/", req.url));
+      return applySecurityHeaders(NextResponse.redirect(new URL("/", req.url)));
     }
 
     const requestHeaders = new Headers(req.headers);
@@ -43,16 +51,19 @@ export async function middleware(req: NextRequest) {
     requestHeaders.set("x-user-role", role);
     requestHeaders.set("x-user-branch", String(payload.branchId || ""));
 
-    return NextResponse.next({
+    const response = NextResponse.next({
       request: {
         headers: requestHeaders,
       },
     });
+    return applySecurityHeaders(response);
   } catch {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+      return applySecurityHeaders(
+        NextResponse.json({ error: "Invalid session" }, { status: 401 })
+      );
     }
-    return NextResponse.redirect(new URL("/login", req.url));
+    return applySecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
   }
 }
 

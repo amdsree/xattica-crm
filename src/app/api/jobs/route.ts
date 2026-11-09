@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAdminBranchView } from "@/lib/auth";
 import { errorResponse, isAdmin, requireSession } from "@/lib/session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -103,6 +104,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
+    const ip = getClientIp(req);
+    const limit = checkRateLimit(`${ip}:${session.userId}`, "create-job", 60, 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Please wait ${limit.retryAfterSeconds} seconds.` },
+        { status: 429 }
+      );
+    }
     const body = await req.json();
     const {
       originBranchId: requestedBranchId,

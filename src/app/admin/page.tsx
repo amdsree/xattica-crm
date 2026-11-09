@@ -27,6 +27,10 @@ import {
   PlusCircle,
   Save,
   X,
+  FileSpreadsheet,
+  Download,
+  Filter,
+  Calendar,
 } from "lucide-react";
 
 interface BranchAnalytic {
@@ -118,6 +122,80 @@ interface AdminBranch {
   };
 }
 
+interface ReportSummary {
+  totalJobs: number;
+  closedJobs: number;
+  totalServiceCharge: number;
+  totalSparesBilled: number;
+  totalSparesCost: number;
+  totalSparesMargin: number;
+  totalInterBranchFees: number;
+  totalNetRevenue: number;
+}
+
+interface ReportBranchBreakup {
+  id: string;
+  name: string;
+  code: string;
+  totalJobs: number;
+  closedJobs: number;
+  serviceCharge: number;
+  sparesBilled: number;
+  sparesCost: number;
+  sparesMargin: number;
+  transferCredit: number;
+  transferDebit: number;
+  netRevenue: number;
+}
+
+interface ReportTechnicianBreakup {
+  id: string;
+  name: string;
+  username: string;
+  branchName: string;
+  totalJobs: number;
+  closedJobs: number;
+  serviceCharge: number;
+  sparesBilled: number;
+  sparesCost: number;
+  netContribution: number;
+}
+
+interface ReportJobRow {
+  id: string;
+  jobNo: string;
+  createdAt: string;
+  closedAt: string | null;
+  status: string;
+  paymentStatus: string;
+  originBranchName: string;
+  originBranchCode: string;
+  servicingBranchName: string | null;
+  customerName: string;
+  customerPhone: string;
+  deviceSummary: string;
+  assignedTechName: string;
+  serviceCharge: number;
+  sparesBilled: number;
+  sparesCost: number;
+  sparesMargin: number;
+  interBranchFee: number;
+  netProfit: number;
+  partsCount: number;
+}
+
+interface ReportData {
+  period: {
+    startDate: string;
+    endDate: string;
+    month: string | null;
+  };
+  summary: ReportSummary;
+  branchBreakup: ReportBranchBreakup[];
+  technicianBreakup: ReportTechnicianBreakup[];
+  jobs: ReportJobRow[];
+}
+
 export default function AdminDashboardPage() {
   const { currentUser, branches } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -159,6 +237,159 @@ export default function AdminDashboardPage() {
   const [editBranchPhone, setEditBranchPhone] = useState("");
   const [editBranchAddress, setEditBranchAddress] = useState("");
   const [isSavingBranch, setIsSavingBranch] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<"overview" | "reports">("overview");
+  const [reportMonth, setReportMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [reportUseCustomDate, setReportUseCustomDate] = useState(false);
+  const [reportFromDate, setReportFromDate] = useState("");
+  const [reportToDate, setReportToDate] = useState("");
+  const [reportBranchId, setReportBranchId] = useState("");
+  const [reportTechId, setReportTechId] = useState("");
+  const [reportJobSearch, setReportJobSearch] = useState("");
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  const fetchReport = useCallback(async () => {
+    setIsLoadingReport(true);
+    setReportError(null);
+    try {
+      const params = new URLSearchParams();
+      if (reportUseCustomDate && reportFromDate && reportToDate) {
+        params.set("from", reportFromDate);
+        params.set("to", reportToDate);
+      } else if (reportMonth) {
+        params.set("month", reportMonth);
+      }
+      if (reportBranchId) params.set("branchId", reportBranchId);
+      if (reportTechId) params.set("techId", reportTechId);
+
+      const res = await fetch(`/api/reports?${params.toString()}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to load report data");
+      }
+      const json = await res.json();
+      setReportData(json);
+    } catch (err) {
+      setReportError((err as Error).message);
+    } finally {
+      setIsLoadingReport(false);
+    }
+  }, [
+    reportMonth,
+    reportUseCustomDate,
+    reportFromDate,
+    reportToDate,
+    reportBranchId,
+    reportTechId,
+  ]);
+
+  useEffect(() => {
+    if (activeTab === "reports") {
+      fetchReport();
+    }
+  }, [activeTab, fetchReport]);
+
+  const handleExportCSV = () => {
+    if (!reportData) return;
+    const periodLabel = reportUseCustomDate
+      ? `${reportFromDate}_to_${reportToDate}`
+      : reportMonth || "all";
+
+    const lines: string[] = [];
+    lines.push(`XATTICA CRM - FINANCIAL AND SERVICE REPORT (${periodLabel})`);
+    lines.push(`Generated On,"${new Date().toLocaleString()}"`);
+    lines.push("");
+
+    lines.push("FINANCIAL SUMMARY");
+    lines.push(`Total Jobs,${reportData.summary.totalJobs}`);
+    lines.push(`Closed Jobs,${reportData.summary.closedJobs}`);
+    lines.push(`Total Service Charges (Rs),${reportData.summary.totalServiceCharge}`);
+    lines.push(`Total Spares Billed (Rs),${reportData.summary.totalSparesBilled}`);
+    lines.push(`Total Spares Wholesale Cost (Rs),${reportData.summary.totalSparesCost}`);
+    lines.push(`Net Spares Margin (Rs),${reportData.summary.totalSparesMargin}`);
+    lines.push(`Inter-Branch Transfer Fees (Rs),${reportData.summary.totalInterBranchFees}`);
+    lines.push(`Total Net Realized Revenue (Rs),${reportData.summary.totalNetRevenue}`);
+    lines.push("");
+
+    lines.push("BRANCH-WISE BREAKDOWN");
+    lines.push(
+      "Branch Name,Code,Total Jobs,Closed Jobs,Service Charges (Rs),Spares Billed (Rs),Spares Cost (Rs),Spares Margin (Rs),Transfer Credit (Rs),Transfer Debit (Rs),Net Revenue (Rs)"
+    );
+    for (const b of reportData.branchBreakup) {
+      lines.push(
+        `"${b.name}","${b.code}",${b.totalJobs},${b.closedJobs},${b.serviceCharge},${b.sparesBilled},${b.sparesCost},${b.sparesMargin},${b.transferCredit},${b.transferDebit},${b.netRevenue}`
+      );
+    }
+    lines.push("");
+
+    lines.push("TECHNICIAN-WISE BREAKDOWN");
+    lines.push(
+      "Technician Name,Branch,Total Cases,Closed Cases,Service Labor (Rs),Spares Billed (Rs),Spares Cost (Rs),Net Contribution (Rs)"
+    );
+    for (const t of reportData.technicianBreakup) {
+      lines.push(
+        `"${t.name}","${t.branchName}",${t.totalJobs},${t.closedJobs},${t.serviceCharge},${t.sparesBilled},${t.sparesCost},${t.netContribution}`
+      );
+    }
+    lines.push("");
+
+    lines.push("DETAILED SERVICE JOB REGISTER");
+    lines.push(
+      "Job No,Intake Date,Status,Origin Branch,Servicing Branch,Customer,Phone,Device,Technician,Service Charge (Rs),Spares Billed (Rs),Spares Cost (Rs),Net Profit (Rs),Payment Status"
+    );
+    for (const j of reportData.jobs) {
+      const dateStr = j.createdAt ? new Date(j.createdAt).toLocaleDateString() : "";
+      lines.push(
+        `"${j.jobNo}","${dateStr}","${j.status}","${j.originBranchName}","${
+          j.servicingBranchName || "-"
+        }","${j.customerName}","${j.customerPhone}","${j.deviceSummary}","${
+          j.assignedTechName
+        }",${j.serviceCharge},${j.sparesBilled},${j.sparesCost},${j.netProfit},"${
+          j.paymentStatus
+        }"`
+      );
+    }
+
+    const csvContent = lines.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.setAttribute(
+      "download",
+      `xattica-report-${periodLabel.replace(/[^a-zA-Z0-9_-]/g, "_")}.csv`
+    );
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const availableMonths = [
+    { value: "2026-11", label: "November 2026 (Current)" },
+    { value: "2026-10", label: "October 2026" },
+    { value: "2026-09", label: "September 2026" },
+    { value: "2026-08", label: "August 2026" },
+    { value: "2026-07", label: "July 2026" },
+    { value: "2026-06", label: "June 2026" },
+    { value: "2026-05", label: "May 2026" },
+    { value: "2026-04", label: "April 2026" },
+    { value: "2026-03", label: "March 2026" },
+    { value: "2026-02", label: "February 2026" },
+    { value: "2026-01", label: "January 2026" },
+    { value: "2025-12", label: "December 2025" },
+  ];
+
+  const availableTechs = staffList.filter(
+    (s) =>
+      (!reportBranchId || s.branchId === reportBranchId) &&
+      (s.role === "INHOUSE_TECH" || s.role === "FIELD_TECH")
+  );
 
   const fetchAdminBranches = useCallback(async () => {
     setIsLoadingBranches(true);
@@ -433,7 +664,36 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
-      {data && (
+      <div className="flex border-b border-zinc-200 gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+            activeTab === "overview"
+              ? "border-purple-600 text-purple-700 bg-purple-50/50 rounded-t-lg"
+              : "border-transparent text-zinc-600 hover:text-zinc-900"
+          }`}
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span>Operations & Multi-Branch Live</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("reports")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 flex items-center gap-2 cursor-pointer transition-colors ${
+            activeTab === "reports"
+              ? "border-blue-600 text-blue-700 bg-blue-50/50 rounded-t-lg"
+              : "border-transparent text-zinc-600 hover:text-zinc-900"
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          <span>Filterable Financial & Spares Reports</span>
+        </button>
+      </div>
+
+      {activeTab === "overview" ? (
+        <>
+          {data && (
         <div className="space-y-4">
           <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
             <Building2 className="w-4 h-4 text-blue-600" />
@@ -1259,6 +1519,439 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+        </>
+      ) : (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-blue-600" />
+                  Financial & Performance Report Filter
+                </h2>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Filter by month or custom dates, branch, and technician to audit service charges and wholesale spares margins.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  disabled={!reportData || reportData.jobs.length === 0}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchReport}
+                  disabled={isLoadingReport}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <span>{isLoadingReport ? "Loading..." : "Apply Filter"}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Time Period
+                </label>
+                <div className="space-y-1.5">
+                  <select
+                    className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    value={reportUseCustomDate ? "custom" : reportMonth}
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        setReportUseCustomDate(true);
+                      } else {
+                        setReportUseCustomDate(false);
+                        setReportMonth(e.target.value);
+                      }
+                    }}
+                  >
+                    <option value="custom">Custom Date Range...</option>
+                    {availableMonths.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {reportUseCustomDate && (
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block">From</span>
+                        <input
+                          type="date"
+                          className="w-full bg-white border border-zinc-300 rounded p-1 text-[11px]"
+                          value={reportFromDate}
+                          onChange={(e) => setReportFromDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block">To</span>
+                        <input
+                          type="date"
+                          className="w-full bg-white border border-zinc-300 rounded p-1 text-[11px]"
+                          value={reportToDate}
+                          onChange={(e) => setReportToDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Branch Filter
+                </label>
+                <select
+                  className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={reportBranchId}
+                  onChange={(e) => {
+                    setReportBranchId(e.target.value);
+                    setReportTechId("");
+                  }}
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Technician Filter
+                </label>
+                <select
+                  className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={reportTechId}
+                  onChange={(e) => setReportTechId(e.target.value)}
+                >
+                  <option value="">All Technicians</option>
+                  {availableTechs.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.branch.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Job Search
+                </label>
+                <input
+                  type="text"
+                  placeholder="Filter by Job # or Customer..."
+                  className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={reportJobSearch}
+                  onChange={(e) => setReportJobSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {reportError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{reportError}</span>
+              </div>
+            )}
+          </div>
+
+          {isLoadingReport && (
+            <div className="py-16 text-center text-zinc-500 text-xs">
+              Calculating service charges, wholesale spares costs, and branch metrics...
+            </div>
+          )}
+
+          {!isLoadingReport && reportData && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
+                  <span className="text-[11px] font-semibold text-zinc-500 block uppercase">
+                    Service Labor
+                  </span>
+                  <span className="text-lg font-black text-zinc-900 block mt-1">
+                    Rs {reportData.summary.totalServiceCharge.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 block mt-0.5">
+                    {reportData.summary.totalJobs} Cases ({reportData.summary.closedJobs} Closed)
+                  </span>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
+                  <span className="text-[11px] font-semibold text-zinc-500 block uppercase">
+                    Spares Billed
+                  </span>
+                  <span className="text-lg font-black text-blue-700 block mt-1">
+                    Rs {reportData.summary.totalSparesBilled.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 block mt-0.5">
+                    Gross billed to customers
+                  </span>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
+                  <span className="text-[11px] font-semibold text-zinc-500 block uppercase">
+                    Spares Wholesale Cost
+                  </span>
+                  <span className="text-lg font-black text-amber-700 block mt-1">
+                    Rs {reportData.summary.totalSparesCost.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 block mt-0.5">
+                    Parts landing expense
+                  </span>
+                </div>
+
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
+                  <span className="text-[11px] font-semibold text-emerald-800 block uppercase">
+                    Spares Net Margin
+                  </span>
+                  <span className="text-lg font-black text-emerald-900 block mt-1">
+                    Rs {reportData.summary.totalSparesMargin.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-emerald-700 block mt-0.5">
+                    Parts gross profit
+                  </span>
+                </div>
+
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 shadow-sm">
+                  <span className="text-[11px] font-semibold text-purple-800 block uppercase">
+                    Net Realized Revenue
+                  </span>
+                  <span className="text-lg font-black text-purple-900 block mt-1">
+                    Rs {reportData.summary.totalNetRevenue.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-purple-700 block mt-0.5">
+                    Labor + Spares margin
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  Branch-Wise Financial & Spares Breakup
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-600 text-[11px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3 font-bold">Branch</th>
+                        <th className="py-2.5 px-3 font-bold text-center">Jobs</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Service Charges</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares Billed</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares Cost</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares Margin</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Inter-Branch Fee</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Net Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 font-mono">
+                      {reportData.branchBreakup.map((b) => (
+                        <tr key={b.id} className="hover:bg-zinc-50">
+                          <td className="py-2.5 px-3 font-sans font-bold text-zinc-900">
+                            {b.name} <span className="text-zinc-400 font-normal">({b.code})</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-zinc-700 font-sans">
+                            {b.totalJobs} <span className="text-zinc-400 text-[11px]">({b.closedJobs} closed)</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-zinc-900">
+                            Rs {b.serviceCharge.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-blue-700">
+                            Rs {b.sparesBilled.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-amber-700">
+                            Rs {b.sparesCost.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">
+                            Rs {b.sparesMargin.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-purple-700">
+                            {b.transferCredit - b.transferDebit >= 0 ? "+" : ""}
+                            Rs {(b.transferCredit - b.transferDebit).toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black text-zinc-900">
+                            Rs {b.netRevenue.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-zinc-200 bg-zinc-50 font-bold text-zinc-900 font-mono">
+                        <td className="py-2.5 px-3 font-sans">Total</td>
+                        <td className="py-2.5 px-3 text-center font-sans">
+                          {reportData.summary.totalJobs} ({reportData.summary.closedJobs} closed)
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          Rs {reportData.summary.totalServiceCharge.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-blue-700">
+                          Rs {reportData.summary.totalSparesBilled.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-amber-700">
+                          Rs {reportData.summary.totalSparesCost.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-emerald-700">
+                          Rs {reportData.summary.totalSparesMargin.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-purple-700">Rs 0</td>
+                        <td className="py-2.5 px-3 text-right text-black font-black">
+                          Rs {reportData.summary.totalNetRevenue.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  Technician-Wise Productivity & Revenue Contribution
+                </h3>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-200 bg-zinc-50 text-zinc-600 text-[11px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3 font-bold">Technician</th>
+                        <th className="py-2.5 px-3 font-bold">Branch</th>
+                        <th className="py-2.5 px-3 font-bold text-center">Cases</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Service Charges</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares Billed</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares Cost</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Net Contribution</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 font-mono">
+                      {reportData.technicianBreakup.map((t) => (
+                        <tr key={t.id} className="hover:bg-zinc-50">
+                          <td className="py-2.5 px-3 font-sans font-bold text-zinc-900">
+                            {t.name}
+                          </td>
+                          <td className="py-2.5 px-3 font-sans text-zinc-600">
+                            {t.branchName}
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-zinc-700 font-sans">
+                            {t.totalJobs} <span className="text-zinc-400 text-[11px]">({t.closedJobs} closed)</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-zinc-900">
+                            Rs {t.serviceCharge.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-blue-700">
+                            Rs {t.sparesBilled.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-amber-700">
+                            Rs {t.sparesCost.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black text-emerald-700">
+                            Rs {t.netContribution.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                    Service Jobs Register ({reportData.jobs.length} Records)
+                  </h3>
+                  <span className="text-xs text-zinc-500">
+                    Click any Job # to inspect card
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-96 overflow-y-auto border border-zinc-200 rounded-lg">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="sticky top-0 bg-zinc-100 text-zinc-700 text-[11px] uppercase tracking-wider z-10">
+                      <tr>
+                        <th className="py-2.5 px-3 font-bold">Job #</th>
+                        <th className="py-2.5 px-3 font-bold">Date</th>
+                        <th className="py-2.5 px-3 font-bold">Branch</th>
+                        <th className="py-2.5 px-3 font-bold">Customer</th>
+                        <th className="py-2.5 px-3 font-bold">Device</th>
+                        <th className="py-2.5 px-3 font-bold">Tech</th>
+                        <th className="py-2.5 px-3 font-bold">Status</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Service (Rs)</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Spares (Rs)</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Net Profit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 font-mono">
+                      {reportData.jobs
+                        .filter(
+                          (j) =>
+                            !reportJobSearch ||
+                            j.jobNo.toLowerCase().includes(reportJobSearch.toLowerCase()) ||
+                            j.customerName.toLowerCase().includes(reportJobSearch.toLowerCase()) ||
+                            j.deviceSummary.toLowerCase().includes(reportJobSearch.toLowerCase())
+                        )
+                        .map((j) => (
+                          <tr key={j.id} className="hover:bg-zinc-50">
+                            <td className="py-2 px-3 font-sans">
+                              <Link
+                                href={`/jobs/${j.id}`}
+                                className="font-bold text-blue-600 hover:underline"
+                              >
+                                {j.jobNo}
+                              </Link>
+                            </td>
+                            <td className="py-2 px-3 text-[11px] text-zinc-500 font-sans">
+                              {new Date(j.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-2 px-3 text-zinc-700 font-sans">
+                              {j.originBranchCode}
+                              {j.servicingBranchName && ` → ${j.servicingBranchName.split(" ")[1] || "SRV"}`}
+                            </td>
+                            <td className="py-2 px-3 text-zinc-900 font-sans font-medium">
+                              {j.customerName}
+                            </td>
+                            <td className="py-2 px-3 text-zinc-600 font-sans text-[11px]">
+                              {j.deviceSummary}
+                            </td>
+                            <td className="py-2 px-3 text-zinc-700 font-sans">
+                              {j.assignedTechName}
+                            </td>
+                            <td className="py-2 px-3 font-sans">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-100 text-zinc-700">
+                                {j.status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right text-zinc-900">
+                              {j.serviceCharge}
+                            </td>
+                            <td className="py-2 px-3 text-right text-blue-700">
+                              {j.sparesBilled}
+                            </td>
+                            <td className="py-2 px-3 text-right font-black text-emerald-700">
+                              Rs {j.netProfit}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

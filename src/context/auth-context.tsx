@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import type { Role } from "@/lib/auth";
 
 export interface Branch {
   id: string;
@@ -21,7 +22,7 @@ export interface User {
   id: string;
   name: string;
   username: string;
-  role: "SUPER_ADMIN" | "BRANCH_MANAGER" | "INHOUSE_TECH" | "FIELD_TECH";
+  role: Role;
   branchId: string;
   phone?: string | null;
   branch: Branch;

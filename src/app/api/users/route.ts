@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, isAdmin, requireSession, requireAdmin, HttpError } from "@/lib/session";
+import {
+  errorResponse,
+  isAdmin,
+  requireSession,
+  requireAdmin,
+  canManageStaff,
+  isSuperAdmin,
+  HttpError,
+} from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
-/**
- * Staff directory used for technician assignment and staff management.
- */
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     const requestedBranchId = new URL(req.url).searchParams.get("branchId");
 
-    const branchId = isAdmin(session)
+    const branchId = canManageStaff(session)
       ? requestedBranchId || undefined
       : session.branchId;
 
@@ -37,12 +42,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/**
- * Add service technician or branch staff. Only Admin.
- */
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin();
+    const session = await requireSession();
+    if (!canManageStaff(session)) {
+      throw new HttpError(403, "Staff management access required");
+    }
+
     const ip = getClientIp(req);
     const limit = checkRateLimit(ip, "create-user", 20, 10 * 60 * 1000);
     if (!limit.allowed) {
@@ -64,9 +70,19 @@ export async function POST(req: NextRequest) {
       throw new HttpError(400, "Password must be at least 8 characters");
     }
 
-    const validRoles = ["INHOUSE_TECH", "FIELD_TECH", "BRANCH_MANAGER"];
+    const validRoles = [
+      "INHOUSE_TECH",
+      "FIELD_TECH",
+      "BRANCH_MANAGER",
+      "STAFF_MANAGER",
+      "SUB_ADMIN",
+    ];
     if (!validRoles.includes(role)) {
-      throw new HttpError(400, "Invalid role. Must be In-house Tech, Field Tech, or Branch Manager");
+      throw new HttpError(400, "Invalid role specified");
+    }
+
+    if ((role === "SUB_ADMIN" || role === "SUPER_ADMIN") && !isSuperAdmin(session)) {
+      throw new HttpError(403, "Only Super Admin can assign administrative roles");
     }
 
     const branch = await prisma.branch.findUnique({
@@ -111,12 +127,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * Admin reset a staff member's password.
- */
 export async function PATCH(req: NextRequest) {
   try {
-    await requireAdmin();
+    const session = await requireSession();
+    if (!canManageStaff(session)) {
+      throw new HttpError(403, "Staff management access required");
+    }
+
     const body = await req.json();
     const { userId, newPassword } = body;
 
@@ -133,6 +150,18 @@ export async function PATCH(req: NextRequest) {
       throw new HttpError(404, "User not found");
     }
 
+    if (user.role === "SUPER_ADMIN" && !isSuperAdmin(session)) {
+      throw new HttpError(403, "Only Super Admin can reset the Super Admin account");
+    }
+
+    if (
+      user.username === "theerdha" &&
+      !isSuperAdmin(session) &&
+      session.username !== "theerdha"
+    ) {
+      throw new HttpError(403, "Permission denied to reset this sub-admin account");
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await prisma.user.update({
@@ -146,12 +175,13 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-/**
- * Remove technician/staff. Only Admin.
- */
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await requireAdmin();
+    const session = await requireSession();
+    if (!isSuperAdmin(session)) {
+      throw new HttpError(403, "Only Super Admin can remove staff members");
+    }
+
     const url = new URL(req.url);
     const userId = url.searchParams.get("id");
 
@@ -173,6 +203,10 @@ export async function DELETE(req: NextRequest) {
 
     if (!targetUser) {
       throw new HttpError(404, "User not found");
+    }
+
+    if (targetUser.username === "theerdha") {
+      throw new HttpError(400, "Sub Admin account Theerdha cannot be deleted");
     }
 
     if (targetUser.assignedJobs.length > 0 || targetUser.intakeJobs.length > 0) {

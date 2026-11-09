@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     // Scope is derived from the signed session only. A branch id in the query
     // string is honoured for super admins (scope picker), never for staff.
-    if (isAdmin(session)) {
+    if (isAdmin(session) || session.role === "STAFF_MANAGER") {
       const scopedBranchId =
         searchParams.get("branchId") || (await getAdminBranchView());
       if (scopedBranchId) where.originBranchId = scopedBranchId;

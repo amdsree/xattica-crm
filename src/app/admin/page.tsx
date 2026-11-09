@@ -344,6 +344,10 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const isStaffManagerOnly = currentUser?.role === "STAFF_MANAGER";
+  const isSuperOrSubAdmin =
+    currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "SUB_ADMIN";
+
   useEffect(() => {
     async function load() {
       setIsLoading(true);
@@ -388,50 +392,63 @@ export default function AdminDashboardPage() {
             <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
               Admin Operations & Financial Center
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
-              Multi-Branch Live
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                isStaffManagerOnly
+                  ? "bg-sky-100 text-sky-800 border-sky-200"
+                  : "bg-purple-100 text-purple-800 border-purple-200"
+              }`}
+            >
+              {isStaffManagerOnly
+                ? "Operations & Analytics (Julian)"
+                : "Multi-Branch Live"}
             </span>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
-            Auditing Kollam, Kottayam, Cochin, and Calicut stores.
+            {isStaffManagerOnly
+              ? "Signed in as Julian (@ceowaves). Authorized for operations, staff management, and financial analytics."
+              : `Auditing multi-branch stores (Logged in as ${currentUser?.name || "Admin"}).`}
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="bg-white p-3 rounded-xl border border-zinc-200 shadow-sm text-right">
-            <span className="text-[11px] font-semibold text-zinc-500 block uppercase">
-              Total Gross Revenue
-            </span>
-            <span className="text-xl font-black text-zinc-900">
-              Rs {data.totalCompanyRevenue.toLocaleString()}
-            </span>
+        {data && (
+          <div className="flex items-center gap-4">
+            <div className="bg-white p-3 rounded-xl border border-zinc-200 shadow-sm text-right">
+              <span className="text-[11px] font-semibold text-zinc-500 block uppercase">
+                Total Gross Revenue
+              </span>
+              <span className="text-xl font-black text-zinc-900">
+                Rs {data.totalCompanyRevenue.toLocaleString()}
+              </span>
+            </div>
+            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-sm text-right">
+              <span className="text-[11px] font-semibold text-emerald-700 block uppercase">
+                Net Service Margin
+              </span>
+              <span className="text-xl font-black text-emerald-900">
+                Rs {data.totalCompanyNetProfit.toLocaleString()}
+              </span>
+            </div>
           </div>
-          <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-sm text-right">
-            <span className="text-[11px] font-semibold text-emerald-700 block uppercase">
-              Net Service Margin
-            </span>
-            <span className="text-xl font-black text-emerald-900">
-              Rs {data.totalCompanyNetProfit.toLocaleString()}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
-      <div className="space-y-4">
-        <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-blue-600" />
-          Branch Performance & Net Profit Breakdown
-        </h2>
+      {data && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-blue-600" />
+            Branch Performance & Net Profit Breakdown
+          </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {data.branchAnalytics.map((b) => (
-            <div
-              key={b.id}
-              className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-3"
-            >
-              <div className="flex justify-between items-start border-b border-zinc-100 pb-2">
-                <div>
-                  <h3 className="font-bold text-zinc-900 text-sm">{b.name}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {data.branchAnalytics.map((b) => (
+              <div
+                key={b.id}
+                className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-3"
+              >
+                <div className="flex justify-between items-start border-b border-zinc-100 pb-2">
+                  <div>
+                    <h3 className="font-bold text-zinc-900 text-sm">{b.name}</h3>
                   <span className="text-xs font-mono text-zinc-500">
                     Code: {b.code}
                   </span>
@@ -486,6 +503,7 @@ export default function AdminDashboardPage() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Staff & Service Technicians Management Section */}
       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
@@ -593,6 +611,12 @@ export default function AdminDashboardPage() {
                 <option value="INHOUSE_TECH">In-House Technician (Bench / Chip-Level)</option>
                 <option value="FIELD_TECH">Field Technician (Doorstep Visits)</option>
                 <option value="BRANCH_MANAGER">Branch Manager (Store Counter)</option>
+                {currentUser?.role === "SUPER_ADMIN" && (
+                  <>
+                    <option value="SUB_ADMIN">Sub Admin (Theerdha - Full Control)</option>
+                    <option value="STAFF_MANAGER">Staff Manager (Julian - Jobs & Staff)</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -650,6 +674,10 @@ export default function AdminDashboardPage() {
                       <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                         s.role === "SUPER_ADMIN"
                           ? "bg-purple-100 text-purple-800"
+                          : s.role === "SUB_ADMIN"
+                          ? "bg-indigo-100 text-indigo-800"
+                          : s.role === "STAFF_MANAGER"
+                          ? "bg-sky-100 text-sky-800"
                           : s.role === "BRANCH_MANAGER"
                           ? "bg-blue-100 text-blue-800"
                           : s.role === "FIELD_TECH"
@@ -659,14 +687,14 @@ export default function AdminDashboardPage() {
                         {s.role.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-zinc-600">{s.phone || "—"}</td>
+                    <td className="py-3 px-3 text-zinc-600">{s.phone || "-"}</td>
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {resetStaffId === s.id ? (
                           <div className="flex items-center gap-1">
                             <input
                               type="password"
-                              placeholder="New pass"
+                              placeholder="New pass (min 8)"
                               className="w-24 bg-white border border-zinc-300 rounded p-1 text-[11px]"
                               value={resetStaffPassword}
                               onChange={(e) => setResetStaffPassword(e.target.value)}
@@ -675,7 +703,7 @@ export default function AdminDashboardPage() {
                               type="button"
                               disabled={isResettingStaff}
                               onClick={() => handleResetStaffPassword(s.id)}
-                              className="px-2 py-1 bg-zinc-900 hover:bg-black text-white rounded text-[10px] font-bold"
+                              className="px-2 py-1 bg-zinc-900 hover:bg-black text-white rounded text-[10px] font-bold cursor-pointer"
                             >
                               Save
                             </button>
@@ -685,35 +713,41 @@ export default function AdminDashboardPage() {
                                 setResetStaffId(null);
                                 setResetStaffPassword("");
                               }}
-                              className="px-1.5 py-1 text-zinc-500 text-[10px]"
+                              className="px-1.5 py-1 text-zinc-500 text-[10px] cursor-pointer"
                             >
                               ✕
                             </button>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setResetStaffId(s.id);
-                              setResetStaffPassword("");
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 border border-zinc-300 rounded text-zinc-700 hover:bg-zinc-100 text-[11px] font-semibold"
-                          >
-                            <KeyRound className="w-3 h-3 text-zinc-500" />
-                            <span>Reset Pass</span>
-                          </button>
+                          (currentUser?.role === "SUPER_ADMIN" ||
+                            (s.role !== "SUPER_ADMIN" && s.username !== "theerdha") ||
+                            currentUser?.username === s.username) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetStaffId(s.id);
+                                setResetStaffPassword("");
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 border border-zinc-300 rounded text-zinc-700 hover:bg-zinc-100 text-[11px] font-semibold cursor-pointer"
+                            >
+                              <KeyRound className="w-3 h-3 text-zinc-500" />
+                              <span>Reset Pass</span>
+                            </button>
+                          )
                         )}
 
-                        {s.role !== "SUPER_ADMIN" && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteStaff(s.id, s.name)}
-                            className="p-1 text-zinc-400 hover:text-red-600 rounded transition-colors"
-                            title="Remove staff member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {currentUser?.role === "SUPER_ADMIN" &&
+                          s.role !== "SUPER_ADMIN" &&
+                          s.username !== "theerdha" && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStaff(s.id, s.name)}
+                              className="p-1 text-zinc-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                              title="Remove staff member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>
@@ -724,7 +758,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Branch Network & Contact Details Management Section */}
       <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-4">
           <div>
@@ -755,8 +788,8 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Add Branch Form */}
-        <form onSubmit={handleAddBranch} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-4">
+        {isSuperOrSubAdmin && (
+          <form onSubmit={handleAddBranch} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-4">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-4 h-4 text-blue-600" />
             <span className="text-xs font-bold text-zinc-900 uppercase tracking-wide">
@@ -826,6 +859,7 @@ export default function AdminDashboardPage() {
             </button>
           </div>
         </form>
+      )}
 
         {/* Operational Branches List & Edit */}
         <div className="space-y-3">
@@ -936,14 +970,16 @@ export default function AdminDashboardPage() {
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditBranch(b)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-zinc-300 rounded-lg text-zinc-700 hover:bg-zinc-100 text-xs font-semibold transition-colors flex-shrink-0 cursor-pointer"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>Edit</span>
-                      </button>
+                      {isSuperOrSubAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditBranch(b)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-zinc-300 rounded-lg text-zinc-700 hover:bg-zinc-100 text-xs font-semibold transition-colors flex-shrink-0 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-zinc-500" />
+                          <span>Edit</span>
+                        </button>
+                      )}
                     </div>
 
                     {b._count && (

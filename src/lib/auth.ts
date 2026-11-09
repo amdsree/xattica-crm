@@ -5,6 +5,8 @@ import { SECRET_KEY } from "@/lib/jwt-key";
 
 const ALLOWED_ROLES = new Set([
   "SUPER_ADMIN",
+  "SUB_ADMIN",
+  "STAFF_MANAGER",
   "BRANCH_MANAGER",
   "INHOUSE_TECH",
   "FIELD_TECH",
@@ -15,6 +17,8 @@ export const ADMIN_BRANCH_VIEW_COOKIE = "xattica_admin_branch_view";
 
 export type Role =
   | "SUPER_ADMIN"
+  | "SUB_ADMIN"
+  | "STAFF_MANAGER"
   | "BRANCH_MANAGER"
   | "INHOUSE_TECH"
   | "FIELD_TECH";

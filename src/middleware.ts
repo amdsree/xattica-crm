@@ -42,7 +42,8 @@ export async function middleware(req: NextRequest) {
     const { payload } = await jwtVerify(token, SECRET_KEY);
     const role = String(payload.role || "");
 
-    if (pathname.startsWith("/admin") && role !== "SUPER_ADMIN") {
+    const allowedAdminRoles = new Set(["SUPER_ADMIN", "SUB_ADMIN", "STAFF_MANAGER"]);
+    if (pathname.startsWith("/admin") && !allowedAdminRoles.has(role)) {
       return applySecurityHeaders(NextResponse.redirect(new URL("/", req.url)));
     }
 

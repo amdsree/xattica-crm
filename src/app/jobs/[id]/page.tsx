@@ -20,6 +20,7 @@ import {
   Building2,
   Plus,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 
 interface JobPart {
@@ -73,6 +74,10 @@ interface JobSheet {
   creditDueDate?: string | null;
   paymentRemarks?: string | null;
   closedOutcome?: string | null;
+  reopenRequested?: boolean;
+  reopenReason?: string | null;
+  reopenRequestedAt?: string | null;
+  reopenApprovedBy?: string | null;
   partsUsed: JobPart[];
   createdAt: string;
   closedAt?: string | null;
@@ -110,6 +115,11 @@ export default function JobDetailPage() {
 
   const [settlePaymentRemarks, setSettlePaymentRemarks] = useState("");
   const [isSettling, setIsSettling] = useState(false);
+
+  const [reopenReasonText, setReopenReasonText] = useState("");
+  const [reopenReviewRemarks, setReopenReviewRemarks] = useState("");
+  const [isSubmittingReopen, setIsSubmittingReopen] = useState(false);
+  const [showReopenInput, setShowReopenInput] = useState(false);
 
   const fetchJob = useCallback(async () => {
     setIsLoading(true);
@@ -403,6 +413,64 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleRequestReopen = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reopenReasonText.trim()) {
+      setError("Please state the reason for requesting a reopen");
+      return;
+    }
+    setIsSubmittingReopen(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REQUEST_REOPEN",
+          reason: reopenReasonText.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to request reopen");
+      setActionSuccess("Reopen request submitted for Admin review.");
+      setShowReopenInput(false);
+      setReopenReasonText("");
+      fetchJob();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsSubmittingReopen(false);
+    }
+  };
+
+  const handleReviewReopen = async (action: "APPROVE_REOPEN" | "REJECT_REOPEN") => {
+    setIsSubmittingReopen(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          remarks: reopenReviewRemarks.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to process reopen");
+      setActionSuccess(
+        action === "APPROVE_REOPEN"
+          ? "Service reopened successfully. Technicians can now continue work."
+          : "Reopen request rejected."
+      );
+      setReopenReviewRemarks("");
+      fetchJob();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsSubmittingReopen(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="py-24 text-center text-zinc-500 text-sm">
@@ -425,13 +493,22 @@ export default function JobDetailPage() {
   )}`;
 
   const isClosed = Boolean(job.closedAt);
-  const isOriginBranch =
+  const isAdminUser =
     currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "SUB_ADMIN" ||
+    currentUser?.username === "theerdha" ||
+    currentUser?.username === "admin";
+  const isStaffManager = currentUser?.role === "STAFF_MANAGER";
+  const isOriginBranch =
+    isAdminUser ||
+    isStaffManager ||
     currentUser?.branchId === job.originBranchId;
   const isServicingBranch =
     Boolean(job.servicingBranchId) &&
-    (currentUser?.role === "SUPER_ADMIN" ||
+    (isAdminUser ||
+      isStaffManager ||
       currentUser?.branchId === job.servicingBranchId);
+  const canApproveReopen = isAdminUser;
   const isOverdue =
     !isClosed &&
     new Date(job.createdAt) <
@@ -1259,6 +1336,130 @@ export default function JobDetailPage() {
                   </div>
                 </div>
               )}
+
+              <div className="bg-amber-50/70 p-5 rounded-xl border border-amber-300 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                      <RotateCcw className="w-4 h-4 text-amber-700" />
+                      Completed Service Reopen Console
+                    </h3>
+                    <p className="text-xs text-amber-900/80 mt-0.5">
+                      Technicians can request reopen approval. Only Super Admin or Theerdha can approve and resume work.
+                    </p>
+                  </div>
+                  {job.reopenRequested && (
+                    <span className="px-2.5 py-1 rounded bg-amber-600 text-white font-bold text-[11px] animate-pulse w-fit">
+                      Reopen Approval Pending
+                    </span>
+                  )}
+                </div>
+
+                {job.reopenRequested ? (
+                  <div className="bg-white p-3.5 rounded-lg border border-amber-200 text-xs space-y-2">
+                    <div>
+                      <span className="text-[11px] font-semibold text-zinc-500 block">Technician Reopen Reason:</span>
+                      <p className="font-bold text-zinc-900 mt-0.5">{job.reopenReason}</p>
+                      {job.reopenRequestedAt && (
+                        <span className="text-[10px] text-zinc-500 block mt-1">
+                          Requested at: {new Date(job.reopenRequestedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+
+                    {canApproveReopen ? (
+                      <div className="pt-2 border-t border-zinc-100 space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Approval or rejection remarks (optional)..."
+                          className="w-full bg-zinc-50 border border-zinc-300 rounded p-1.5 text-xs"
+                          value={reopenReviewRemarks}
+                          onChange={(e) => setReopenReviewRemarks(e.target.value)}
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={isSubmittingReopen}
+                            onClick={() => handleReviewReopen("APPROVE_REOPEN")}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Approve & Reopen Service</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSubmittingReopen}
+                            onClick={() => handleReviewReopen("REJECT_REOPEN")}
+                            className="px-3.5 py-1.5 border border-zinc-300 text-zinc-700 hover:bg-zinc-100 rounded text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                          >
+                            Reject Request
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-900">
+                        Request has been submitted and is currently awaiting approval from Super Admin or Theerdha.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {showReopenInput ? (
+                      <form onSubmit={handleRequestReopen} className="bg-white p-3.5 rounded-lg border border-amber-200 space-y-2 text-xs">
+                        <label className="block font-semibold text-zinc-800 text-[11px]">
+                          State Findings / Reason for Reopening Service *
+                        </label>
+                        <textarea
+                          required
+                          rows={2}
+                          placeholder="e.g. Device returned by customer with recurrence of power issue. Motherboard secondary rail requires diagnostic re-check."
+                          className="w-full bg-zinc-50 border border-zinc-300 rounded p-2 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          value={reopenReasonText}
+                          onChange={(e) => setReopenReasonText(e.target.value)}
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowReopenInput(false)}
+                            className="px-3 py-1 border border-zinc-300 text-zinc-600 rounded text-xs cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isSubmittingReopen}
+                            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold disabled:opacity-50 cursor-pointer"
+                          >
+                            {isSubmittingReopen ? "Submitting..." : "Submit Reopen Request"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowReopenInput(true)}
+                          className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Request Reopen Approval</span>
+                        </button>
+                        {canApproveReopen && (
+                          <button
+                            type="button"
+                            disabled={isSubmittingReopen}
+                            onClick={() => handleReviewReopen("APPROVE_REOPEN")}
+                            className="px-3.5 py-2 bg-zinc-900 hover:bg-black text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Direct Admin Reopen</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

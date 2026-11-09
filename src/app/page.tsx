@@ -61,14 +61,17 @@ export default function JobsQueuePage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedBranchId, setSelectedBranchId] = useState("");
 
+  const canFilterAllBranches =
+    currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "SUB_ADMIN" ||
+    currentUser?.role === "STAFF_MANAGER";
+
   const fetchJobs = useCallback(async () => {
     if (!currentUser) return;
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
-      // Non-admin scope is derived from the session on the server; only a
-      // super admin may ask for a specific branch.
-      if (currentUser.role === "SUPER_ADMIN" && selectedBranchId) {
+      if (canFilterAllBranches && selectedBranchId) {
         params.append("branchId", selectedBranchId);
       }
       if (search) params.append("search", search);
@@ -231,7 +234,7 @@ export default function JobsQueuePage() {
               Service Jobs Queue
             </h1>
             <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              {currentUser?.role === "SUPER_ADMIN"
+              {canFilterAllBranches
                 ? "Admin View: All Branches"
                 : `Branch: ${currentUser?.branch?.name}`}
             </span>
@@ -297,7 +300,7 @@ export default function JobsQueuePage() {
             />
           </div>
 
-          {currentUser?.role === "SUPER_ADMIN" && (
+          {canFilterAllBranches && (
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-zinc-500" />
               <select

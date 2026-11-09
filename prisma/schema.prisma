@@ -99,6 +99,11 @@ model JobSheet {
   disposalAlertCount    Int         @default(0)
   closedOutcome         String?     // REPAIR_DONE, NON_REPAIRABLE, RETURNED_NO_SERVICE
 
+  reopenRequested       Boolean     @default(false)
+  reopenReason          String?
+  reopenRequestedAt     DateTime?
+  reopenApprovedBy      String?
+
   partsUsed             JobPart[]
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt

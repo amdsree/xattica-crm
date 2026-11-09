@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, ADMIN_BRANCH_VIEW_COOKIE, isSecureRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { errorResponse } from "@/lib/session";
+import { errorResponse, isAdmin } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession();
-    if (!session || session.role !== "SUPER_ADMIN") {
+    if (!session || (!isAdmin(session) && session.role !== "STAFF_MANAGER")) {
       return NextResponse.json(
-        { error: "Only Super Admin can switch branch view" },
+        { error: "Administrative access required to switch branch view" },
         { status: 403 }
       );
     }

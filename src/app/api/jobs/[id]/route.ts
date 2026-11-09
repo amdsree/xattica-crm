@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { canAccessJob, errorResponse, requireSession, HttpError } from "@/lib/session";
+import {
+  canAccessJob,
+  canReopenJob,
+  isAdmin,
+  errorResponse,
+  requireSession,
+  HttpError,
+} from "@/lib/session";
 
 export async function GET(
   req: NextRequest,
@@ -76,9 +83,21 @@ export async function PATCH(
       );
     }
 
-    if (existingJob.closedAt && effectiveRole !== "SUPER_ADMIN" && action !== "RECORD_PAYMENT") {
+    const isReopenAction = [
+      "REQUEST_REOPEN",
+      "APPROVE_REOPEN",
+      "REJECT_REOPEN",
+      "DIRECT_REOPEN",
+    ].includes(action);
+
+    if (
+      existingJob.closedAt &&
+      !isAdmin(session) &&
+      action !== "RECORD_PAYMENT" &&
+      !isReopenAction
+    ) {
       return NextResponse.json(
-        { error: "This job is closed and locked. Only Super Admin can modify closed records." },
+        { error: "This job is closed and locked. Request reopen approval to make changes." },
         { status: 403 }
       );
     }
@@ -313,6 +332,85 @@ export async function PATCH(
           paymentStatus,
           paymentRemarks,
           status: paymentStatus === "PAID" ? "DELIVERED_PAID" : existingJob.status,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "REQUEST_REOPEN") {
+      const { reason } = body;
+      if (!reason || !reason.trim()) {
+        throw new HttpError(400, "Reason for reopening service is required");
+      }
+
+      const timestamp = new Date().toLocaleString();
+      const updatedRemarks = existingJob.remarks
+        ? `${existingJob.remarks}\n[${timestamp}] Reopen Requested by ${session.name}: ${reason.trim()}`
+        : `[${timestamp}] Reopen Requested by ${session.name}: ${reason.trim()}`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          reopenRequested: true,
+          reopenReason: reason.trim(),
+          reopenRequestedAt: new Date(),
+          remarks: updatedRemarks,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "APPROVE_REOPEN" || action === "DIRECT_REOPEN") {
+      if (!canReopenJob(session)) {
+        throw new HttpError(
+          403,
+          "Only Super Admin or Theerdha can approve reopening completed service jobs"
+        );
+      }
+
+      const timestamp = new Date().toLocaleString();
+      const reasonText =
+        body.remarks?.trim() || existingJob.reopenReason || "Approved by administration";
+      const updatedRemarks = existingJob.remarks
+        ? `${existingJob.remarks}\n[${timestamp}] Service Reopened by ${session.name} (@${session.username}): ${reasonText}`
+        : `[${timestamp}] Service Reopened by ${session.name} (@${session.username}): ${reasonText}`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          closedAt: null,
+          closedOutcome: null,
+          status: "DIAGNOSIS_WIP",
+          reopenRequested: false,
+          reopenReason: null,
+          reopenRequestedAt: null,
+          reopenApprovedBy: `${session.name} (@${session.username})`,
+          remarks: updatedRemarks,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "REJECT_REOPEN") {
+      if (!canReopenJob(session)) {
+        throw new HttpError(
+          403,
+          "Only Super Admin or Theerdha can review reopen requests"
+        );
+      }
+
+      const timestamp = new Date().toLocaleString();
+      const rejectionNote =
+        body.remarks?.trim() || "Request rejected by administration";
+      const updatedRemarks = existingJob.remarks
+        ? `${existingJob.remarks}\n[${timestamp}] Reopen Rejected by ${session.name}: ${rejectionNote}`
+        : `[${timestamp}] Reopen Rejected by ${session.name}: ${rejectionNote}`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          reopenRequested: false,
+          remarks: updatedRemarks,
         },
       });
       return NextResponse.json(updated);

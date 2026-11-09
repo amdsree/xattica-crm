@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, requireAdmin } from "@/lib/session";
+import { errorResponse, requireAnalyticsAccess } from "@/lib/session";
 
 export async function GET() {
   try {
-    // Company-wide financials: super admins only.
-    await requireAdmin();
+    await requireAnalyticsAccess();
 
     const branches = await prisma.branch.findMany({
       include: {

@@ -115,6 +115,54 @@ async function main() {
       } else {
         console.log(`[xattica] Database already contains ${count} user(s).`);
       }
+
+      const defaultBranch =
+        (await prisma.branch.findFirst({ where: { code: "COK" } })) ||
+        (await prisma.branch.findFirst());
+
+      if (defaultBranch) {
+        const existingTheerdha = await prisma.user.findUnique({
+          where: { username: "theerdha" },
+        });
+        if (!existingTheerdha) {
+          const theerdhaPass = process.env.THEERDHA_PASSWORD || "theerdha123";
+          const theerdhaHash = await bcrypt.hash(theerdhaPass, 10);
+          await prisma.user.create({
+            data: {
+              name: "Theerdha",
+              username: "theerdha",
+              password: theerdhaHash,
+              role: "SUB_ADMIN",
+              branchId: defaultBranch.id,
+              phone: "+91 98470 00001",
+            },
+          });
+          console.log(
+            `[xattica] Sub Admin "theerdha" created (initial password: ${theerdhaPass})`
+          );
+        }
+
+        const existingCeoWaves = await prisma.user.findUnique({
+          where: { username: "ceowaves" },
+        });
+        if (!existingCeoWaves) {
+          const ceoPass = process.env.CEOWAVES_PASSWORD || "ceowaves123";
+          const ceoHash = await bcrypt.hash(ceoPass, 10);
+          await prisma.user.create({
+            data: {
+              name: "Julian",
+              username: "ceowaves",
+              password: ceoHash,
+              role: "STAFF_MANAGER",
+              branchId: defaultBranch.id,
+              phone: "+91 98470 00002",
+            },
+          });
+          console.log(
+            `[xattica] Staff Manager "ceowaves" (Julian) created (initial password: ${ceoPass})`
+          );
+        }
+      }
       await prisma.$disconnect();
     } catch (err) {
       console.error("[xattica] Seed check warning:", err && err.message ? err.message : err);

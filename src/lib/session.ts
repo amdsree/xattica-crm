@@ -23,14 +23,59 @@ export async function requireSession(): Promise<SessionPayload> {
 
 export async function requireAdmin(): Promise<SessionPayload> {
   const session = await requireSession();
-  if (session.role !== "SUPER_ADMIN") {
+  if (session.role !== "SUPER_ADMIN" && session.role !== "SUB_ADMIN") {
     throw new HttpError(403, "Administrator access required");
   }
   return session;
 }
 
-export function isAdmin(session: SessionPayload): boolean {
+export async function requireStaffManager(): Promise<SessionPayload> {
+  const session = await requireSession();
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "SUB_ADMIN" &&
+    session.role !== "STAFF_MANAGER"
+  ) {
+    throw new HttpError(403, "Staff management access required");
+  }
+  return session;
+}
+
+export async function requireAnalyticsAccess(): Promise<SessionPayload> {
+  const session = await requireSession();
+  if (
+    session.role !== "SUPER_ADMIN" &&
+    session.role !== "SUB_ADMIN" &&
+    session.role !== "STAFF_MANAGER"
+  ) {
+    throw new HttpError(403, "Analytics access required");
+  }
+  return session;
+}
+
+export function isSuperAdmin(session: SessionPayload): boolean {
   return session.role === "SUPER_ADMIN";
+}
+
+export function isAdmin(session: SessionPayload): boolean {
+  return session.role === "SUPER_ADMIN" || session.role === "SUB_ADMIN";
+}
+
+export function canManageStaff(session: SessionPayload): boolean {
+  return (
+    session.role === "SUPER_ADMIN" ||
+    session.role === "SUB_ADMIN" ||
+    session.role === "STAFF_MANAGER"
+  );
+}
+
+export function canReopenJob(session: SessionPayload): boolean {
+  return (
+    session.role === "SUPER_ADMIN" ||
+    session.role === "SUB_ADMIN" ||
+    session.username === "theerdha" ||
+    session.username === "admin"
+  );
 }
 
 export interface JobBranchRef {
@@ -43,7 +88,7 @@ export function canAccessJob(
   session: SessionPayload,
   job: JobBranchRef
 ): boolean {
-  if (isAdmin(session)) return true;
+  if (isAdmin(session) || session.role === "STAFF_MANAGER") return true;
   return (
     job.originBranchId === session.branchId ||
     job.servicingBranchId === session.branchId

@@ -115,5 +115,7 @@ model JobPart {
   landingPrice  Float
   sellingPrice  Float
   quantity      Int        @default(1)
+  vendorName    String?
+  invoiceNumber String?
   createdAt     DateTime   @default(now())
 }

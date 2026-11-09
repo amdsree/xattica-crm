@@ -274,6 +274,8 @@ export async function PATCH(
                 landingPrice: landing,
                 sellingPrice: selling,
                 quantity: requestedQty,
+                vendorName: part.vendorName || (part.stockItemId ? (await tx.stockItem.findUnique({ where: { id: part.stockItemId } }))?.vendorName : null) || null,
+                invoiceNumber: part.invoiceNumber || (part.stockItemId ? (await tx.stockItem.findUnique({ where: { id: part.stockItemId } }))?.invoiceNumber : null) || null,
               },
             });
           }

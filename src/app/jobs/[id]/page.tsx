@@ -29,6 +29,8 @@ interface JobPart {
   sellingPrice: number;
   quantity: number;
   stockItemId?: string | null;
+  vendorName?: string | null;
+  invoiceNumber?: string | null;
 }
 
 interface StockItem {
@@ -37,6 +39,7 @@ interface StockItem {
   landingPrice: number;
   quantity: number;
   invoiceNumber: string;
+  vendorName: string;
 }
 
 interface JobSheet {
@@ -304,6 +307,8 @@ export default function JobDetailPage() {
         sellingPrice: 0,
         quantity: 1,
         stockItemId: null,
+        vendorName: "",
+        invoiceNumber: "",
       },
     ]);
   };
@@ -318,6 +323,8 @@ export default function JobDetailPage() {
       landingPrice: item.landingPrice,
       sellingPrice: Math.round(item.landingPrice * 1.35),
       stockItemId: item.id,
+      vendorName: item.vendorName,
+      invoiceNumber: item.invoiceNumber,
     };
     setParts(nextParts);
   };
@@ -332,6 +339,15 @@ export default function JobDetailPage() {
     try {
       if (closurePaymentStatus === "CREDIT" && currentUser?.role !== "SUPER_ADMIN") {
         throw new Error("Credit release requires Admin permission.");
+      }
+
+      if (closureOutcome === "REPAIR_DONE" && parts.length > 0) {
+        for (const p of parts) {
+          if (!p.partName.trim()) throw new Error("Part name is required for all parts");
+          if (!p.vendorName?.trim() || !p.invoiceNumber?.trim()) {
+            throw new Error(`Please enter purchase place / vendor and invoice number for "${p.partName}"`);
+          }
+        }
       }
 
       const res = await fetch(`/api/jobs/${id}`, {
@@ -1035,6 +1051,43 @@ export default function JobDetailPage() {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
+
+                        <div className="sm:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-zinc-200/60 mt-1">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">
+                              Purchase Place / Vendor *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Supreme Computers, Sun Infotech"
+                              className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs"
+                              value={p.vendorName || ""}
+                              onChange={(e) => {
+                                const next = [...parts];
+                                next[idx].vendorName = e.target.value;
+                                setParts(next);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">
+                              Purchase Invoice Ref / Bill No *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. INV-2026-9912"
+                              className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs font-mono"
+                              value={p.invoiceNumber || ""}
+                              onChange={(e) => {
+                                const next = [...parts];
+                                next[idx].invoiceNumber = e.target.value;
+                                setParts(next);
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1115,6 +1168,40 @@ export default function JobDetailPage() {
                   </span>
                 </div>
               </div>
+
+              {job.partsUsed && job.partsUsed.length > 0 && (
+                <div className="border border-zinc-200 rounded-lg overflow-hidden text-xs">
+                  <div className="bg-zinc-100 px-3 py-2 font-bold text-zinc-800 flex justify-between items-center">
+                    <span>Parts & Spares Replaced ({job.partsUsed.length})</span>
+                    <span className="font-mono text-zinc-600">Total: Rs {partsTotalSelling}</span>
+                  </div>
+                  <div className="divide-y divide-zinc-200 bg-white">
+                    {job.partsUsed.map((p, idx) => (
+                      <div key={idx} className="p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-zinc-900">
+                            {p.partName} <span className="text-zinc-500 font-normal">x {p.quantity}</span>
+                          </div>
+                          <div className="text-[11px] text-zinc-500 mt-0.5">
+                            <span>Source / Vendor: <strong className="text-zinc-700">{p.vendorName || "Direct / Local"}</strong></span>
+                            {p.invoiceNumber && (
+                              <span className="ml-3">Purchase Invoice Ref: <strong className="text-zinc-700 font-mono">{p.invoiceNumber}</strong></span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-zinc-900 block">Rs {p.sellingPrice * p.quantity}</span>
+                          {currentUser?.role === "SUPER_ADMIN" && (
+                            <span className="text-[10px] text-zinc-500 block">
+                              Wholesale: Rs {p.landingPrice * p.quantity} (Margin: +Rs {(p.sellingPrice - p.landingPrice) * p.quantity})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {currentUser?.role === "SUPER_ADMIN" && (
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-xs flex justify-between">

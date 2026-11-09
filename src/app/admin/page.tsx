@@ -21,6 +21,12 @@ import {
   Trash2,
   Shield,
   CheckCircle,
+  Phone,
+  MapPin,
+  Edit3,
+  PlusCircle,
+  Save,
+  X,
 } from "lucide-react";
 
 interface BranchAnalytic {
@@ -98,6 +104,20 @@ interface StaffUser {
   createdAt?: string;
 }
 
+interface AdminBranch {
+  id: string;
+  name: string;
+  code: string;
+  phone: string;
+  address: string;
+  _count?: {
+    users: number;
+    originJobs: number;
+    servicingJobs: number;
+    stockItems: number;
+  };
+}
+
 export default function AdminDashboardPage() {
   const { currentUser, branches } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -120,6 +140,111 @@ export default function AdminDashboardPage() {
   const [resetStaffId, setResetStaffId] = useState<string | null>(null);
   const [resetStaffPassword, setResetStaffPassword] = useState("");
   const [isResettingStaff, setIsResettingStaff] = useState(false);
+
+  // Branch management state
+  const [adminBranches, setAdminBranches] = useState<AdminBranch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const [branchSuccess, setBranchSuccess] = useState<string | null>(null);
+
+  const [newBranchName, setNewBranchName] = useState("");
+  const [newBranchCode, setNewBranchCode] = useState("");
+  const [newBranchPhone, setNewBranchPhone] = useState("");
+  const [newBranchAddress, setNewBranchAddress] = useState("");
+  const [isCreatingBranch, setIsCreatingBranch] = useState(false);
+
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [editBranchName, setEditBranchName] = useState("");
+  const [editBranchCode, setEditBranchCode] = useState("");
+  const [editBranchPhone, setEditBranchPhone] = useState("");
+  const [editBranchAddress, setEditBranchAddress] = useState("");
+  const [isSavingBranch, setIsSavingBranch] = useState(false);
+
+  const fetchAdminBranches = useCallback(async () => {
+    setIsLoadingBranches(true);
+    try {
+      const res = await fetch("/api/branches");
+      if (res.ok) {
+        const json = await res.json();
+        setAdminBranches(json.branches || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch branches", err);
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  }, []);
+
+  const handleAddBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBranchError(null);
+    setBranchSuccess(null);
+    setIsCreatingBranch(true);
+    try {
+      const res = await fetch("/api/branches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newBranchName,
+          code: newBranchCode,
+          phone: newBranchPhone,
+          address: newBranchAddress,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to create branch");
+      setBranchSuccess(`Branch "${newBranchName}" (${newBranchCode.toUpperCase()}) created successfully.`);
+      setNewBranchName("");
+      setNewBranchCode("");
+      setNewBranchPhone("");
+      setNewBranchAddress("");
+      fetchAdminBranches();
+    } catch (err) {
+      setBranchError((err as Error).message);
+    } finally {
+      setIsCreatingBranch(false);
+    }
+  };
+
+  const handleStartEditBranch = (b: AdminBranch) => {
+    setEditingBranchId(b.id);
+    setEditBranchName(b.name);
+    setEditBranchCode(b.code);
+    setEditBranchPhone(b.phone);
+    setEditBranchAddress(b.address);
+    setBranchError(null);
+    setBranchSuccess(null);
+  };
+
+  const handleSaveBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBranchId) return;
+    setBranchError(null);
+    setBranchSuccess(null);
+    setIsSavingBranch(true);
+    try {
+      const res = await fetch("/api/branches", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingBranchId,
+          name: editBranchName,
+          code: editBranchCode,
+          phone: editBranchPhone,
+          address: editBranchAddress,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update branch");
+      setBranchSuccess(`Branch "${editBranchName}" updated successfully.`);
+      setEditingBranchId(null);
+      fetchAdminBranches();
+    } catch (err) {
+      setBranchError((err as Error).message);
+    } finally {
+      setIsSavingBranch(false);
+    }
+  };
 
   const fetchStaff = useCallback(async () => {
     setIsLoadingStaff(true);
@@ -236,7 +361,8 @@ export default function AdminDashboardPage() {
     }
     load();
     fetchStaff();
-  }, [fetchStaff]);
+    fetchAdminBranches();
+  }, [fetchStaff, fetchAdminBranches]);
 
   if (isLoading) {
     return (
@@ -594,6 +720,244 @@ export default function AdminDashboardPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Branch Network & Contact Details Management Section */}
+      <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-4">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-blue-600" />
+              Branch Network & Contact Numbers
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Add new branches, update branch codes, official helpline numbers, and workshop addresses.
+            </p>
+          </div>
+          <span className="text-xs font-bold px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 w-fit">
+            {adminBranches.length} Operational Branches
+          </span>
+        </div>
+
+        {branchError && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{branchError}</span>
+          </div>
+        )}
+
+        {branchSuccess && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{branchSuccess}</span>
+          </div>
+        )}
+
+        {/* Add Branch Form */}
+        <form onSubmit={handleAddBranch} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-4">
+          <div className="flex items-center gap-2">
+            <PlusCircle className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-bold text-zinc-900 uppercase tracking-wide">
+              Add New Branch Location
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Branch Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Xattica Calicut"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newBranchName}
+                onChange={(e) => setNewBranchName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Code (2-5 letters) *</label>
+              <input
+                type="text"
+                required
+                maxLength={5}
+                placeholder="e.g. CLT"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs font-mono uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newBranchCode}
+                onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Helpline / Contact Number *</label>
+              <input
+                type="text"
+                required
+                placeholder="+91 98470 44444"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newBranchPhone}
+                onChange={(e) => setNewBranchPhone(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Address *</label>
+              <input
+                type="text"
+                required
+                placeholder="Mavoor Road, Calicut, Kerala"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newBranchAddress}
+                onChange={(e) => setNewBranchAddress(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={isCreatingBranch}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>{isCreatingBranch ? "Creating..." : "Add Branch"}</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Operational Branches List & Edit */}
+        <div className="space-y-3">
+          <span className="text-xs font-bold text-zinc-900 uppercase tracking-wide block">
+            Configured Branches & Direct Numbers
+          </span>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {adminBranches.map((b) => (
+              <div
+                key={b.id}
+                className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3"
+              >
+                {editingBranchId === b.id ? (
+                  <form onSubmit={handleSaveBranch} className="space-y-3 text-xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-200">
+                      <span className="font-bold text-zinc-900">Edit Branch Details</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingBranchId(null)}
+                        className="p-1 text-zinc-400 hover:text-zinc-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-semibold text-zinc-700 mb-0.5 text-[11px]">Branch Name</label>
+                        <input
+                          type="text"
+                          required
+                          className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs font-semibold"
+                          value={editBranchName}
+                          onChange={(e) => setEditBranchName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-zinc-700 mb-0.5 text-[11px]">Branch Code</label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={5}
+                          className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs font-mono uppercase"
+                          value={editBranchCode}
+                          onChange={(e) => setEditBranchCode(e.target.value.toUpperCase())}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-zinc-700 mb-0.5 text-[11px]">Contact Number</label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs"
+                        value={editBranchPhone}
+                        onChange={(e) => setEditBranchPhone(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-zinc-700 mb-0.5 text-[11px]">Workshop Address</label>
+                      <input
+                        type="text"
+                        required
+                        className="w-full bg-white border border-zinc-300 rounded p-1.5 text-xs"
+                        value={editBranchAddress}
+                        onChange={(e) => setEditBranchAddress(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditingBranchId(null)}
+                        className="px-3 py-1.5 border border-zinc-300 rounded text-zinc-700 text-xs font-semibold hover:bg-zinc-100"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingBranch}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center gap-1 shadow-sm disabled:opacity-50 cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{isSavingBranch ? "Saving..." : "Save Changes"}</span>
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-zinc-900 text-sm">{b.name}</h3>
+                          <span className="font-mono font-bold text-[10px] px-2 py-0.5 rounded bg-zinc-200 text-zinc-800">
+                            {b.code}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-600 mt-1 font-medium">
+                          <Phone className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                          <span>{b.phone}</span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-xs text-zinc-500 mt-1">
+                          <MapPin className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0 mt-0.5" />
+                          <span className="line-clamp-2">{b.address}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditBranch(b)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-zinc-300 rounded-lg text-zinc-700 hover:bg-zinc-100 text-xs font-semibold transition-colors flex-shrink-0 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+
+                    {b._count && (
+                      <div className="flex items-center gap-3 pt-3 mt-3 border-t border-zinc-200 text-[11px] text-zinc-500">
+                        <span>Staff: <strong className="text-zinc-800">{b._count.users}</strong></span>
+                        <span>Direct Jobs: <strong className="text-zinc-800">{b._count.originJobs}</strong></span>
+                        <span>Repairs Done: <strong className="text-zinc-800">{b._count.servicingJobs}</strong></span>
+                        <span>Stock Parts: <strong className="text-zinc-800">{b._count.stockItems}</strong></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>

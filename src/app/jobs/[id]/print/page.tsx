@@ -25,6 +25,16 @@ interface JobSheet {
   estimatedCost?: number | null;
   estimatedSpareCost?: number | null;
   createdAt: string;
+  closedAt?: string | null;
+  closedOutcome?: string | null;
+  serviceCharge?: number;
+  partsUsed?: Array<{
+    partName: string;
+    quantity: number;
+    sellingPrice: number;
+    vendorName?: string | null;
+    invoiceNumber?: string | null;
+  }>;
 }
 
 export default function PrintJobsheetPage() {
@@ -191,34 +201,65 @@ export default function PrintJobsheetPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 border border-black p-3 text-center text-xs">
-          <div>
-            <span className="text-zinc-500 font-semibold block text-[10px]">
-              Estimated Service Cost
+        {job.closedAt ? (
+          <div className="border border-black p-3 space-y-2 text-xs">
+            <span className="font-bold uppercase tracking-wider text-zinc-600 block">
+              Final Service Invoice Breakdown
             </span>
-            <span className="font-black text-sm">
-              Rs {job.estimatedCost || 0}
-            </span>
+            <div className="divide-y divide-zinc-200">
+              <div className="py-1 flex justify-between">
+                <span>Labor & Service Charge ({job.closedOutcome?.replace("_", " ")})</span>
+                <span className="font-bold">Rs {job.serviceCharge || 0}</span>
+              </div>
+              {job.partsUsed && job.partsUsed.length > 0 && job.partsUsed.map((p, i) => (
+                <div key={i} className="py-1 flex justify-between">
+                  <div>
+                    <span>{p.partName} x {p.quantity}</span>
+                    {p.invoiceNumber && (
+                      <span className="text-[10px] text-zinc-500 ml-2">(Invoice: {p.invoiceNumber})</span>
+                    )}
+                  </div>
+                  <span className="font-bold">Rs {p.sellingPrice * p.quantity}</span>
+                </div>
+              ))}
+              <div className="pt-2 flex justify-between font-black text-sm border-t-2 border-black">
+                <span>TOTAL BILLED AMOUNT</span>
+                <span>
+                  Rs {(job.serviceCharge || 0) + (job.partsUsed?.reduce((s, p) => s + p.sellingPrice * p.quantity, 0) || 0)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="border-x border-zinc-300">
-            <span className="text-zinc-500 font-semibold block text-[10px]">
-              Estimated Spares Cost
-            </span>
-            <span className="font-black text-sm">
-              Rs {job.estimatedSpareCost || 0}
-            </span>
+        ) : (
+          <div className="grid grid-cols-3 gap-3 border border-black p-3 text-center text-xs">
+            <div>
+              <span className="text-zinc-500 font-semibold block text-[10px]">
+                Estimated Service Cost
+              </span>
+              <span className="font-black text-sm">
+                Rs {job.estimatedCost || 0}
+              </span>
+            </div>
+            <div className="border-x border-zinc-300">
+              <span className="text-zinc-500 font-semibold block text-[10px]">
+                Estimated Spares Cost
+              </span>
+              <span className="font-black text-sm">
+                Rs {job.estimatedSpareCost || 0}
+              </span>
+            </div>
+            <div>
+              <span className="text-zinc-500 font-semibold block text-[10px]">
+                Target Delivery TAT
+              </span>
+              <span className="font-black text-sm">
+                {job.tatDate
+                  ? new Date(job.tatDate).toLocaleDateString()
+                  : "2 Working Days"}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-zinc-500 font-semibold block text-[10px]">
-              Target Delivery TAT
-            </span>
-            <span className="font-black text-sm">
-              {job.tatDate
-                ? new Date(job.tatDate).toLocaleDateString()
-                : "2 Working Days"}
-            </span>
-          </div>
-        </div>
+        )}
 
         <div className="border-2 border-black p-3 text-[10px] space-y-1.5 leading-tight">
           <span className="font-bold uppercase tracking-wider block text-xs underline">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/auth-context";
 import {
@@ -15,6 +15,12 @@ import {
   UserCheck,
   Cpu,
   Flame,
+  Users,
+  UserPlus,
+  KeyRound,
+  Trash2,
+  Shield,
+  CheckCircle,
 } from "lucide-react";
 
 interface BranchAnalytic {
@@ -81,10 +87,137 @@ interface AnalyticsData {
   }>;
 }
 
+interface StaffUser {
+  id: string;
+  name: string;
+  username: string;
+  role: string;
+  phone?: string | null;
+  branchId: string;
+  branch: { id: string; code: string; name: string };
+  createdAt?: string;
+}
+
 export default function AdminDashboardPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, branches } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Staff management state
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+  const [staffSuccess, setStaffSuccess] = useState<string | null>(null);
+
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffUsername, setNewStaffUsername] = useState("");
+  const [newStaffPassword, setNewStaffPassword] = useState("");
+  const [newStaffBranchId, setNewStaffBranchId] = useState("");
+  const [newStaffRole, setNewStaffRole] = useState("INHOUSE_TECH");
+  const [newStaffPhone, setNewStaffPhone] = useState("");
+  const [isCreatingStaff, setIsCreatingStaff] = useState(false);
+
+  const [resetStaffId, setResetStaffId] = useState<string | null>(null);
+  const [resetStaffPassword, setResetStaffPassword] = useState("");
+  const [isResettingStaff, setIsResettingStaff] = useState(false);
+
+  const fetchStaff = useCallback(async () => {
+    setIsLoadingStaff(true);
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) {
+        const json = await res.json();
+        setStaffList(json.users || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch staff", err);
+    } finally {
+      setIsLoadingStaff(false);
+    }
+  }, []);
+
+  const handleAddStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffError(null);
+    setStaffSuccess(null);
+
+    if (!newStaffBranchId) {
+      setStaffError("Please select a branch for the new staff member");
+      return;
+    }
+
+    setIsCreatingStaff(true);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newStaffName,
+          username: newStaffUsername,
+          password: newStaffPassword,
+          branchId: newStaffBranchId,
+          role: newStaffRole,
+          phone: newStaffPhone,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to create staff member");
+      }
+
+      setStaffSuccess(`Technician "${newStaffName}" (@${newStaffUsername}) created successfully.`);
+      setNewStaffName("");
+      setNewStaffUsername("");
+      setNewStaffPassword("");
+      setNewStaffPhone("");
+      fetchStaff();
+    } catch (err) {
+      setStaffError((err as Error).message);
+    } finally {
+      setIsCreatingStaff(false);
+    }
+  };
+
+  const handleResetStaffPassword = async (userId: string) => {
+    if (!resetStaffPassword || resetStaffPassword.length < 6) {
+      setStaffError("New password must be at least 6 characters");
+      return;
+    }
+    setIsResettingStaff(true);
+    setStaffError(null);
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, newPassword: resetStaffPassword }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to reset password");
+      setStaffSuccess(json.message || "Password updated");
+      setResetStaffId(null);
+      setResetStaffPassword("");
+    } catch (err) {
+      setStaffError((err as Error).message);
+    } finally {
+      setIsResettingStaff(false);
+    }
+  };
+
+  const handleDeleteStaff = async (userId: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete staff member "${name}"?`)) return;
+    setStaffError(null);
+    setStaffSuccess(null);
+    try {
+      const res = await fetch(`/api/users?id=${userId}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to delete staff");
+      setStaffSuccess(json.message || "Staff deleted");
+      fetchStaff();
+    } catch (err) {
+      setStaffError((err as Error).message);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -102,7 +235,8 @@ export default function AdminDashboardPage() {
       }
     }
     load();
-  }, []);
+    fetchStaff();
+  }, [fetchStaff]);
 
   if (isLoading) {
     return (
@@ -224,6 +358,243 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Staff & Service Technicians Management Section */}
+      <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-4">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+              <Users className="w-5 h-5 text-purple-600" />
+              Staff & Service Technicians Management
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Add and manage technicians across branches with distinct role credentials and quick password resets.
+            </p>
+          </div>
+          <span className="text-xs font-bold px-3 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-200 w-fit">
+            {staffList.length} Active Staff Members
+          </span>
+        </div>
+
+        {staffError && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{staffError}</span>
+          </div>
+        )}
+
+        {staffSuccess && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{staffSuccess}</span>
+          </div>
+        )}
+
+        {/* Add Staff Form */}
+        <form onSubmit={handleAddStaff} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 space-y-4">
+          <div className="flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-purple-600" />
+            <span className="text-xs font-bold text-zinc-900 uppercase tracking-wide">
+              Add New Service Technician / Branch Staff
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Full Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Anil Kumar"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffName}
+                onChange={(e) => setNewStaffName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Username (for sign in) *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. anil_cok"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs font-mono focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffUsername}
+                onChange={(e) => setNewStaffUsername(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Initial Password *</label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="Minimum 6 characters"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffPassword}
+                onChange={(e) => setNewStaffPassword(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Assigned Branch *</label>
+              <select
+                required
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffBranchId}
+                onChange={(e) => setNewStaffBranchId(e.target.value)}
+              >
+                <option value="">Select Branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Staff Role *</label>
+              <select
+                required
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffRole}
+                onChange={(e) => setNewStaffRole(e.target.value)}
+              >
+                <option value="INHOUSE_TECH">In-House Technician (Bench / Chip-Level)</option>
+                <option value="FIELD_TECH">Field Technician (Doorstep Visits)</option>
+                <option value="BRANCH_MANAGER">Branch Manager (Store Counter)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-zinc-700 mb-1">Phone Number (optional)</label>
+              <input
+                type="text"
+                placeholder="+91 98470 xxxxx"
+                className="w-full bg-white border border-zinc-300 rounded-md p-2 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                value={newStaffPhone}
+                onChange={(e) => setNewStaffPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={isCreatingStaff}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>{isCreatingStaff ? "Creating..." : "Create Technician Account"}</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Existing Staff Directory */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-zinc-700 uppercase tracking-wide">
+            Branch Staff Directory
+          </h3>
+
+          <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-semibold uppercase text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Name</th>
+                  <th className="py-2.5 px-3">Username</th>
+                  <th className="py-2.5 px-3">Branch</th>
+                  <th className="py-2.5 px-3">Role</th>
+                  <th className="py-2.5 px-3">Phone</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200 bg-white">
+                {staffList.map((s) => (
+                  <tr key={s.id} className="hover:bg-zinc-50/60 transition-colors">
+                    <td className="py-3 px-3 font-bold text-zinc-900">{s.name}</td>
+                    <td className="py-3 px-3 font-mono text-zinc-600">@{s.username}</td>
+                    <td className="py-3 px-3 font-semibold text-zinc-700">
+                      {s.branch?.name} ({s.branch?.code})
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        s.role === "SUPER_ADMIN"
+                          ? "bg-purple-100 text-purple-800"
+                          : s.role === "BRANCH_MANAGER"
+                          ? "bg-blue-100 text-blue-800"
+                          : s.role === "FIELD_TECH"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-emerald-100 text-emerald-800"
+                      }`}>
+                        {s.role.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-zinc-600">{s.phone || "—"}</td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {resetStaffId === s.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="password"
+                              placeholder="New pass"
+                              className="w-24 bg-white border border-zinc-300 rounded p-1 text-[11px]"
+                              value={resetStaffPassword}
+                              onChange={(e) => setResetStaffPassword(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              disabled={isResettingStaff}
+                              onClick={() => handleResetStaffPassword(s.id)}
+                              className="px-2 py-1 bg-zinc-900 hover:bg-black text-white rounded text-[10px] font-bold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetStaffId(null);
+                                setResetStaffPassword("");
+                              }}
+                              className="px-1.5 py-1 text-zinc-500 text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResetStaffId(s.id);
+                              setResetStaffPassword("");
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 border border-zinc-300 rounded text-zinc-700 hover:bg-zinc-100 text-[11px] font-semibold"
+                          >
+                            <KeyRound className="w-3 h-3 text-zinc-500" />
+                            <span>Reset Pass</span>
+                          </button>
+                        )}
+
+                        {s.role !== "SUPER_ADMIN" && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStaff(s.id, s.name)}
+                            className="p-1 text-zinc-400 hover:text-red-600 rounded transition-colors"
+                            title="Remove staff member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

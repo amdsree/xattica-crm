@@ -58,7 +58,11 @@ export async function PATCH(
 
     const existingJob = await prisma.jobSheet.findUnique({
       where: { id },
-      include: { partsUsed: true },
+      include: {
+        partsUsed: true,
+        originBranch: true,
+        servicingBranch: true,
+      },
     });
 
     if (!existingJob) {
@@ -107,13 +111,88 @@ export async function PATCH(
 
     if (action === "INTER_BRANCH_TRANSFER") {
       const { servicingBranchId, interBranchFee, status, remarks } = body;
+      const targetBranch = servicingBranchId
+        ? await prisma.branch.findUnique({ where: { id: servicingBranchId } })
+        : null;
+      const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      const targetName = targetBranch?.name || "servicing branch";
+      const originName = existingJob.originBranch?.name || "origin branch";
+      const logNote = `\n[${timestamp}] Dispatched from ${originName} to ${targetName} for specialized service.`;
+
       const updated = await prisma.jobSheet.update({
         where: { id },
         data: {
           servicingBranchId: servicingBranchId || existingJob.servicingBranchId,
           interBranchFee: interBranchFee !== undefined ? parseFloat(interBranchFee) : existingJob.interBranchFee,
           status: status || "TRANSFER_IN_TRANSIT",
-          remarks: remarks !== undefined ? remarks : existingJob.remarks,
+          remarks: (remarks !== undefined ? remarks : existingJob.remarks || "") + logNote,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "RECEIVE_AT_SERVICING") {
+      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.servicingBranchId) {
+        return NextResponse.json(
+          { error: "Only staff at the servicing branch can confirm receipt of this hardware." },
+          { status: 403 }
+        );
+      }
+      const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      const servicingName = existingJob.servicingBranch?.name || "Servicing Branch";
+      const logNote = `\n[${timestamp}] Physical device received at ${servicingName}. Work in progress initiated by ${session.name}.`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          status: "TRANSFER_WIP",
+          remarks: (existingJob.remarks || "") + logNote,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "DISPATCH_TO_ORIGIN") {
+      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.servicingBranchId) {
+        return NextResponse.json(
+          { error: "Only staff at the servicing branch can dispatch this hardware back." },
+          { status: 403 }
+        );
+      }
+      const { dispatchRemarks } = body;
+      const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      const servicingName = existingJob.servicingBranch?.name || "Servicing Branch";
+      const originName = existingJob.originBranch?.name || "Origin Branch";
+      const note = dispatchRemarks ? ` Notes: ${dispatchRemarks}` : "";
+      const logNote = `\n[${timestamp}] Servicing completed at ${servicingName}. Dispatched back to ${originName}.${note}`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          status: "TRANSFER_QA",
+          remarks: (existingJob.remarks || "") + logNote,
+        },
+      });
+      return NextResponse.json(updated);
+    }
+
+    if (action === "RECEIVE_AT_ORIGIN") {
+      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.originBranchId) {
+        return NextResponse.json(
+          { error: "Only staff at the originating home branch can confirm receipt of returned hardware." },
+          { status: 403 }
+        );
+      }
+      const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      const originName = existingJob.originBranch?.name || "Origin Branch";
+      const servicingName = existingJob.servicingBranch?.name || "Servicing Branch";
+      const logNote = `\n[${timestamp}] Physical device received back at ${originName} from ${servicingName}. Ready for customer delivery and final settlement.`;
+
+      const updated = await prisma.jobSheet.update({
+        where: { id },
+        data: {
+          status: "READY_FOR_DELIVERY",
+          remarks: (existingJob.remarks || "") + logNote,
         },
       });
       return NextResponse.json(updated);

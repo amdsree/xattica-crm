@@ -95,6 +95,7 @@ export default function JobDetailPage() {
 
   const [transferBranchId, setTransferBranchId] = useState("");
   const [transferFee, setTransferFee] = useState("500");
+  const [returnRemarks, setReturnRemarks] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
 
   const [closureOutcome, setClosureOutcome] = useState<"REPAIR_DONE" | "NON_REPAIRABLE" | "RETURNED_NO_SERVICE">("REPAIR_DONE");
@@ -224,6 +225,76 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleReceiveAtServicing = async () => {
+    setIsTransferring(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RECEIVE_AT_SERVICING" }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to confirm receipt at servicing branch");
+      }
+      setActionSuccess("Hardware marked as received at servicing branch.");
+      fetchJob();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleDispatchToOrigin = async () => {
+    setIsTransferring(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "DISPATCH_TO_ORIGIN",
+          dispatchRemarks: returnRemarks,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to dispatch back to origin branch");
+      }
+      setActionSuccess(`Hardware dispatched back to ${job?.originBranch?.name}.`);
+      setReturnRemarks("");
+      fetchJob();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleReceiveAtOrigin = async () => {
+    setIsTransferring(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "RECEIVE_AT_ORIGIN" }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to confirm receipt at origin branch");
+      }
+      setActionSuccess("Hardware marked as received back at home branch.");
+      fetchJob();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
   const handleAddPart = () => {
     setParts([
       ...parts,
@@ -338,6 +409,13 @@ export default function JobDetailPage() {
   )}`;
 
   const isClosed = Boolean(job.closedAt);
+  const isOriginBranch =
+    currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.branchId === job.originBranchId;
+  const isServicingBranch =
+    Boolean(job.servicingBranchId) &&
+    (currentUser?.role === "SUPER_ADMIN" ||
+      currentUser?.branchId === job.servicingBranchId);
   const isOverdue =
     !isClosed &&
     new Date(job.createdAt) <
@@ -585,76 +663,219 @@ export default function JobDetailPage() {
           )}
 
           {!isClosed && (
-            <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-100 pb-2.5">
-                <ArrowRightLeft className="w-4 h-4 text-purple-600" />
-                Inter-Branch Transfer (e.g. Chip-Level Repair at Cochin)
-              </h2>
+            <div className="space-y-4">
+              {/* State A: Device Dispatched to Servicing Branch - Awaiting Physical Receipt at Servicing */}
+              {job.servicingBranchId && job.status === "TRANSFER_IN_TRANSIT" && (
+                <div className="bg-purple-50/70 p-5 rounded-xl border-2 border-purple-400 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-purple-700 text-white">
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                        In Transit to Servicing Branch
+                      </span>
+                      <h3 className="text-sm font-bold text-zinc-900 pt-1">
+                        Dispatched from {job.originBranch.name} ({job.originBranch.code}) to {job.servicingBranch?.name} ({job.servicingBranch?.code})
+                      </h3>
+                      <p className="text-xs text-zinc-600">
+                        Specialized repair request. Internal Fee Credit: <span className="font-bold text-purple-900">Rs {job.interBranchFee}</span>.
+                      </p>
+                    </div>
+                  </div>
 
-              <p className="text-xs text-zinc-500">
-                Route this hardware to a specialized branch. Kottayam maintains
-                the customer billing, and a fixed fee will be credited to the
-                servicing branch.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    Destination Branch
-                  </label>
-                  <select
-                    className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs font-semibold"
-                    value={transferBranchId}
-                    onChange={(e) => setTransferBranchId(e.target.value)}
-                  >
-                    <option value="">Select Branch</option>
-                    {branches
-                      .filter((b) => b.id !== job.originBranchId)
-                      .map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.code})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    Fixed Internal Charge (Rs)
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs"
-                    value={transferFee}
-                    onChange={(e) => setTransferFee(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex items-end gap-2">
-                  <button
-                    type="button"
-                    disabled={isTransferring}
-                    onClick={() => handleTransfer("TRANSFER_IN_TRANSIT")}
-                    className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-bold transition-colors disabled:opacity-50"
-                  >
-                    Dispatch to Branch
-                  </button>
-                  {job.servicingBranchId && (
-                    <button
-                      type="button"
-                      disabled={isTransferring}
-                      onClick={() => handleTransfer("TRANSFER_QA")}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-bold transition-colors disabled:opacity-50"
-                    >
-                      Return to Origin (QA)
-                    </button>
+                  {isServicingBranch ? (
+                    <div className="pt-2 border-t border-purple-200">
+                      <p className="text-xs text-purple-900 font-semibold mb-2">
+                        Physical device arrived at {job.servicingBranch?.name}? Acknowledge custody to begin diagnosis:
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isTransferring}
+                        onClick={handleReceiveAtServicing}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Mark as Received at {job.servicingBranch?.name || "Servicing Branch"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white/80 rounded-lg border border-purple-200 text-xs text-purple-900">
+                      Waiting for {job.servicingBranch?.name} to confirm physical receipt of hardware.
+                    </div>
                   )}
                 </div>
-              </div>
+              )}
+
+              {/* State B: Device at Servicing Branch - Under Active Repair */}
+              {job.servicingBranchId && (job.status === "TRANSFER_WIP" || job.status === "DIAGNOSIS_WIP") && (
+                <div className="bg-white p-5 rounded-xl border-2 border-indigo-200 shadow-sm space-y-3">
+                  <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-100 pb-2.5">
+                    <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                    Inter-Branch Service (Servicing at {job.servicingBranch?.name})
+                  </h2>
+
+                  {isServicingBranch ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-zinc-600">
+                        When repair is completed (or determined non-repairable), dispatch this hardware back to the origin branch <span className="font-bold text-zinc-900">{job.originBranch.name} ({job.originBranch.code})</span>.
+                      </p>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-zinc-700">
+                          Repair Findings & Return Remarks for {job.originBranch.name}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Chip-level repair completed. Power rail restored, burn-in tested OK."
+                          className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2.5 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          value={returnRemarks}
+                          onChange={(e) => setReturnRemarks(e.target.value)}
+                        />
+                      </div>
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          disabled={isTransferring}
+                          onClick={handleDispatchToOrigin}
+                          className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                          Dispatch Back to {job.originBranch.name} ({job.originBranch.code})
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-indigo-50/50 rounded-lg border border-indigo-200 text-xs text-indigo-900">
+                      Hardware is currently undergoing specialized service at {job.servicingBranch?.name}. Internal fee credit: Rs {job.interBranchFee}.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* State C: Device Dispatched Back to Origin - Awaiting Physical Receipt at Origin */}
+              {job.servicingBranchId && job.status === "TRANSFER_QA" && (
+                <div className="bg-emerald-50/70 p-5 rounded-xl border-2 border-emerald-400 shadow-sm space-y-3">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-700 text-white">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Returned from Servicing Branch
+                    </span>
+                    <h3 className="text-sm font-bold text-zinc-900 pt-1">
+                      Hardware Dispatched Back to {job.originBranch.name} ({job.originBranch.code})
+                    </h3>
+                    <p className="text-xs text-zinc-600">
+                      Servicing completed by {job.servicingBranch?.name}.
+                    </p>
+                  </div>
+
+                  {isOriginBranch ? (
+                    <div className="pt-2 border-t border-emerald-200">
+                      <p className="text-xs text-emerald-900 font-semibold mb-2">
+                        Hardware physically returned to {job.originBranch.name}? Acknowledge custody to unlock final QA & customer delivery:
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isTransferring}
+                        onClick={handleReceiveAtOrigin}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Mark as Received at {job.originBranch.name} ({job.originBranch.code})
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white/80 rounded-lg border border-emerald-200 text-xs text-emerald-900">
+                      Device is in transit back to {job.originBranch.name}. Waiting for home branch receipt acknowledgment.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* State D: Initial Branch Intake (Not Transferred Yet) */}
+              {!job.servicingBranchId && isOriginBranch && (
+                <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-4">
+                  <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-100 pb-2.5">
+                    <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+                    Inter-Branch Transfer (e.g. Chip-Level Repair at Cochin)
+                  </h2>
+
+                  <p className="text-xs text-zinc-500">
+                    Route this hardware to a specialized branch. {job.originBranch.name} maintains
+                    customer billing, and a fixed fee will be credited to the servicing branch upon service completion.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <label className="block font-semibold text-zinc-700 mb-1">
+                        Destination Branch
+                      </label>
+                      <select
+                        className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs font-semibold"
+                        value={transferBranchId}
+                        onChange={(e) => setTransferBranchId(e.target.value)}
+                      >
+                        <option value="">Select Branch</option>
+                        {branches
+                          .filter((b) => b.id !== job.originBranchId)
+                          .map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name} ({b.code})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-zinc-700 mb-1">
+                        Fixed Internal Charge (Rs)
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full bg-zinc-50 border border-zinc-300 rounded-md p-2 text-xs"
+                        value={transferFee}
+                        onChange={(e) => setTransferFee(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        disabled={isTransferring}
+                        onClick={() => handleTransfer("TRANSFER_IN_TRANSIT")}
+                        className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        Dispatch to Branch
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {!isClosed && (
+          {!isClosed && job.servicingBranchId && !isOriginBranch && (
+            <div className="bg-zinc-50 p-5 rounded-xl border border-zinc-200 text-xs text-zinc-600 space-y-1">
+              <span className="font-bold text-zinc-800 flex items-center gap-1.5 text-sm">
+                <ShieldCheck className="w-4 h-4 text-zinc-600" />
+                Customer Invoicing & Settlement Handled by {job.originBranch.name}
+              </span>
+              <p>
+                As the servicing branch, internal transfer credit (Rs {job.interBranchFee}) is allocated to your branch. Final customer invoicing, payment collection, and hardware delivery will be executed by {job.originBranch.name} ({job.originBranch.code}) upon return.
+              </p>
+            </div>
+          )}
+
+          {!isClosed && job.servicingBranchId && isOriginBranch && ["TRANSFER_IN_TRANSIT", "TRANSFER_WIP", "TRANSFER_QA"].includes(job.status) && (
+            <div className="bg-zinc-50 p-5 rounded-xl border border-zinc-200 text-xs text-zinc-600 space-y-1">
+              <span className="font-bold text-zinc-800 flex items-center gap-1.5 text-sm">
+                <Lock className="w-4 h-4 text-zinc-600" />
+                Case Closure Locked (Hardware with Servicing Branch)
+              </span>
+              <p>
+                Confirm physical receipt of the returned hardware at {job.originBranch.name} before initiating customer delivery, warranty terms, and payment settlement.
+              </p>
+            </div>
+          )}
+
+          {!isClosed && (!job.servicingBranchId || !["TRANSFER_IN_TRANSIT", "TRANSFER_WIP", "TRANSFER_QA"].includes(job.status)) && isOriginBranch && (
             <div className="bg-white p-5 rounded-xl border-2 border-emerald-500 shadow-sm space-y-4">
               <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-100 pb-2.5">
                 <CheckCircle className="w-4 h-4 text-emerald-600" />

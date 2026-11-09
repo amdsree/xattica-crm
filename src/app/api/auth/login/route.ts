@@ -3,9 +3,19 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { signToken, SESSION_COOKIE_NAME, SessionPayload, isSecureRequest } from "@/lib/auth";
 import { errorResponse } from "@/lib/session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const limit = checkRateLimit(ip, "login", 5, 10 * 60 * 1000);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts. Please try again in ${limit.retryAfterSeconds} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const { username, password } = await req.json();
 
     if (!username || !password) {

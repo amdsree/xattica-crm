@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -10,7 +11,9 @@ import {
   Wrench,
   Building2,
   LogOut,
+  KeyRound,
 } from "lucide-react";
+import ChangePasswordModal from "@/components/ChangePasswordModal";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -22,6 +25,7 @@ export default function Navbar() {
     logout,
     isLoading,
   } = useAuth();
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   if (pathname === "/login") {
     return null;
@@ -148,6 +152,15 @@ export default function Navbar() {
 
             <button
               type="button"
+              onClick={() => setIsPasswordModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-xs font-semibold transition-colors"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Password</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 void logout();
               }}
@@ -159,6 +172,11 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </header>
   );
 }

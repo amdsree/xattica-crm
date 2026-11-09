@@ -64,8 +64,8 @@ async function main() {
         const adminHash = await bcrypt.hash(adminPass, 10);
         const techHash = await bcrypt.hash(techPass, 10);
 
-        console.log(`[xattica] Initial Super Admin account created: username: "admin", password: "${adminPass}"`);
-        console.log(`[xattica] Initial Technician accounts created with password: "${techPass}"`);
+        console.log('[xattica] Initial Super Admin account created: username: "admin"');
+        console.log('[xattica] Initial Technician accounts created.');
 
         await prisma.user.create({
           data: {
@@ -111,7 +111,7 @@ async function main() {
           },
         });
 
-        console.log("[xattica] Seed completed. Login ready: admin / admin123");
+        console.log("[xattica] Seed completed. Super Admin ready: admin");
       } else {
         console.log(`[xattica] Database already contains ${count} user(s).`);
       }
@@ -137,9 +137,7 @@ async function main() {
               phone: "+91 98470 00001",
             },
           });
-          console.log(
-            `[xattica] Sub Admin "theerdha" created (initial password: ${theerdhaPass})`
-          );
+          console.log('[xattica] Sub Admin "theerdha" verified/created.');
         }
 
         const existingCeoWaves = await prisma.user.findUnique({
@@ -158,9 +156,7 @@ async function main() {
               phone: "+91 98470 00002",
             },
           });
-          console.log(
-            `[xattica] Staff Manager "ceowaves" (Julian) created (initial password: ${ceoPass})`
-          );
+          console.log('[xattica] Staff Manager "ceowaves" (Julian) verified/created.');
         }
       }
       await prisma.$disconnect();

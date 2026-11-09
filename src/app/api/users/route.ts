@@ -85,6 +85,10 @@ export async function POST(req: NextRequest) {
       throw new HttpError(403, "Only Super Admin can assign administrative roles");
     }
 
+    if (role === "STAFF_MANAGER" && !isAdmin(session)) {
+      throw new HttpError(403, "Only administrators can assign staff manager roles");
+    }
+
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
     });
@@ -155,9 +159,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (
-      user.username === "theerdha" &&
+      user.role === "SUB_ADMIN" &&
       !isSuperAdmin(session) &&
-      session.username !== "theerdha"
+      session.userId !== user.id
     ) {
       throw new HttpError(403, "Permission denied to reset this sub-admin account");
     }

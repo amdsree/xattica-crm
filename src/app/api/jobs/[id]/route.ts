@@ -151,7 +151,7 @@ export async function PATCH(
     }
 
     if (action === "RECEIVE_AT_SERVICING") {
-      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.servicingBranchId) {
+      if (!isAdmin(session) && session.branchId !== existingJob.servicingBranchId) {
         return NextResponse.json(
           { error: "Only staff at the servicing branch can confirm receipt of this hardware." },
           { status: 403 }
@@ -172,7 +172,7 @@ export async function PATCH(
     }
 
     if (action === "DISPATCH_TO_ORIGIN") {
-      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.servicingBranchId) {
+      if (!isAdmin(session) && session.branchId !== existingJob.servicingBranchId) {
         return NextResponse.json(
           { error: "Only staff at the servicing branch can dispatch this hardware back." },
           { status: 403 }
@@ -196,7 +196,7 @@ export async function PATCH(
     }
 
     if (action === "RECEIVE_AT_ORIGIN") {
-      if (effectiveRole !== "SUPER_ADMIN" && session.branchId !== existingJob.originBranchId) {
+      if (!isAdmin(session) && session.branchId !== existingJob.originBranchId) {
         return NextResponse.json(
           { error: "Only staff at the originating home branch can confirm receipt of returned hardware." },
           { status: 403 }
@@ -218,6 +218,24 @@ export async function PATCH(
     }
 
     if (action === "CLOSE_CASE") {
+      if (existingJob.originBranchId !== session.branchId && !isAdmin(session)) {
+        return NextResponse.json(
+          { error: "Only staff at the originating home branch can close and settle cases." },
+          { status: 403 }
+        );
+      }
+
+      if (
+        existingJob.servicingBranchId &&
+        ["TRANSFER_IN_TRANSIT", "TRANSFER_WIP", "TRANSFER_QA"].includes(existingJob.status) &&
+        !isAdmin(session)
+      ) {
+        return NextResponse.json(
+          { error: "Cannot close case while hardware is in transit or undergoing servicing at another branch." },
+          { status: 400 }
+        );
+      }
+
       const {
         closedOutcome,
         serviceCharge,
@@ -234,7 +252,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Service charge is required for all outcomes" }, { status: 400 });
       }
 
-      if (paymentStatus === "CREDIT" && effectiveRole !== "SUPER_ADMIN") {
+      if (paymentStatus === "CREDIT" && !isAdmin(session)) {
         return NextResponse.json({ error: "Delivery on credit requires Admin approval" }, { status: 403 });
       }
 
@@ -325,12 +343,23 @@ export async function PATCH(
     }
 
     if (action === "RECORD_PAYMENT") {
+      if (existingJob.originBranchId !== session.branchId && !isAdmin(session)) {
+        return NextResponse.json(
+          { error: "Only staff at the originating home branch can record payments." },
+          { status: 403 }
+        );
+      }
+
       const { paymentStatus, paymentRemarks } = body;
+      if (!paymentStatus || !["PAID", "CREDIT", "UNPAID"].includes(paymentStatus)) {
+        return NextResponse.json({ error: "Valid paymentStatus (PAID, CREDIT, UNPAID) is required" }, { status: 400 });
+      }
+
       const updated = await prisma.jobSheet.update({
         where: { id },
         data: {
           paymentStatus,
-          paymentRemarks,
+          paymentRemarks: paymentRemarks !== undefined ? paymentRemarks : existingJob.paymentRemarks,
           status: paymentStatus === "PAID" ? "DELIVERED_PAID" : existingJob.status,
         },
       });

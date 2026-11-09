@@ -12,6 +12,15 @@ export function checkRateLimit(
 ): { allowed: boolean; remaining: number; retryAfterSeconds?: number } {
   const key = `${action}:${identifier}`;
   const now = Date.now();
+
+  if (rateLimitStore.size > 2000) {
+    for (const [storedKey, storedRecord] of rateLimitStore.entries()) {
+      if (storedRecord.timestamps.every((t) => now - t >= windowMs)) {
+        rateLimitStore.delete(storedKey);
+      }
+    }
+  }
+
   let record = rateLimitStore.get(key);
 
   if (!record) {

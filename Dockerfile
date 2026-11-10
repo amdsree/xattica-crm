@@ -36,6 +36,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 
+RUN mkdir -p /app/.next/cache && chmod -R 777 /app/.next/cache
+
 USER nextjs
 
 EXPOSE 3000
